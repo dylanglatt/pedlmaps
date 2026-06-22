@@ -10,7 +10,15 @@ function Follower({ follow }) {
   return null;
 }
 
-export default function RouteMap({ coords, markers, fill, follow }) {
+function Overviewer({ overview, bounds }) {
+  const map = useMap();
+  useEffect(() => {
+    if (overview) map.fitBounds(bounds, { padding: [40, 40] });
+  }, [overview]); // eslint-disable-line
+  return null;
+}
+
+export default function RouteMap({ coords, markers, fill, follow, overview }) {
   if (!coords || !coords.length) return null;
   const lats = coords.map((c) => c[0]);
   const lons = coords.map((c) => c[1]);
@@ -30,6 +38,7 @@ export default function RouteMap({ coords, markers, fill, follow }) {
           </CircleMarker>
         ))}
         {follow && <Follower follow={follow} />}
+        <Overviewer overview={overview} bounds={bounds} />
       </MapContainer>
     </div>
   );

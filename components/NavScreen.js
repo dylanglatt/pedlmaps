@@ -4,6 +4,7 @@ import {
   PanResponder, LayoutAnimation, UIManager,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import Svg, { Path, Circle } from 'react-native-svg';
 import RouteMap from './RouteMap';
 import { nav } from '../lib/voiceNav';
 import { fmtMiles } from '../lib/tripPlanner';
@@ -12,6 +13,17 @@ import { useTheme, radius, font, shadow } from '../lib/theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+// Apple-style route-overview glyph: hollow start, curve, filled end.
+function RouteIcon({ color, size = 22 }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24">
+      <Path d="M7 6.5 C 12 7, 11 15, 16.5 16.5" stroke={color} strokeWidth={2} fill="none" strokeLinecap="round" />
+      <Circle cx="7" cy="6.5" r="2.7" stroke={color} strokeWidth={2} fill="none" />
+      <Circle cx="16.7" cy="16.8" r="3" fill={color} />
+    </Svg>
+  );
 }
 
 function arrowFor(text = '') {
@@ -32,6 +44,7 @@ export default function NavScreen({ trip, onEnd }) {
   const [next, setNext] = useState(route.maneuvers?.[1] || null);
   const [here, setHere] = useState(null);
   const [expanded, setExpanded] = useState(false);
+  const [overview, setOverview] = useState(false);
   const [voiceOn, setVoiceOn] = useState(!nav.muted);
   const arrival = useRef(new Date(Date.now() + plan.totalSec * 1000)).current;
   const [minLeft, setMinLeft] = useState(Math.max(1, Math.round(plan.totalSec / 60)));
@@ -41,6 +54,7 @@ export default function NavScreen({ trip, onEnd }) {
     nav.start({
       maneuvers: route.maneuvers,
       routeCoords: route.coords,
+      intro: `Starting route to ${dest?.name || dest?.label || 'your destination'}.`,
       onProgress: ({ maneuver, next: nx }) => { setCur(maneuver); setNext(nx); },
       onLocationUpdate: (h) => setHere(h),
       onArrive: () => { setCur({ instruction: 'You have arrived.' }); setNext(null); },
@@ -76,7 +90,7 @@ export default function NavScreen({ trip, onEnd }) {
   return (
     <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={() => { nav.stop(); onEnd && onEnd(); }}>
       <View style={styles.root}>
-        <RouteMap coords={route.coords} markers={markers} fill follow={here} showUser />
+        <RouteMap coords={route.coords} markers={markers} fill follow={overview ? null : here} overview={overview} showUser />
 
         {/* Top maneuver banner */}
         <View style={styles.banner}>
@@ -94,17 +108,13 @@ export default function NavScreen({ trip, onEnd }) {
 
         {/* Floating map controls (grouped, Apple-style) */}
         <View style={styles.fab}>
+          <TouchableOpacity style={styles.fabBtn} onPress={() => setOverview((o) => !o)} activeOpacity={0.7}>
+            <RouteIcon color={overview ? c.primary : c.text} size={22} />
+          </TouchableOpacity>
+          <View style={styles.fabSep} />
           <TouchableOpacity style={styles.fabBtn} onPress={() => setVoice(!voiceOn)} activeOpacity={0.7}>
             <Ionicons name={voiceOn ? 'volume-high' : 'volume-mute'} size={20} color={voiceOn ? c.primary : c.textMute} />
           </TouchableOpacity>
-          {here && (
-            <>
-              <View style={styles.fabSep} />
-              <TouchableOpacity style={styles.fabBtn} onPress={() => setHere({ ...here })} activeOpacity={0.7}>
-                <Ionicons name="navigate" size={18} color={c.primary} />
-              </TouchableOpacity>
-            </>
-          )}
         </View>
 
         {/* Bottom swipe-up panel */}

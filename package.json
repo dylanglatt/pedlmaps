@@ -8,6 +8,7 @@
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~56.0.12",
+    "expo-audio": "~56.0.12",
     "expo-font": "~56.0.7",
     "expo-haptics": "~56.0.3",
     "expo-location": "~56.0.18",
