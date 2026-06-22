@@ -1,62 +1,52 @@
-import React from 'react';
-import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
+import React, { useMemo } from 'react';
+import { View, Text, FlatList, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { availabilityLevel, COLORS, COLOR_BG } from '../lib/gbfs';
+import { availabilityLevel } from '../lib/gbfs';
 import { formatDistance, formatAge } from '../lib/geo';
-import { colors, radius } from '../lib/theme';
+import { useTheme, levelColor, radius, font } from '../lib/theme';
+import OccupancyBar from './OccupancyBar';
 
-export default function StationList({ stations, mode, onSelect, saved, onToggleSave }) {
+let Haptics = null;
+try { Haptics = require('expo-haptics'); } catch {}
+const tap = () => { if (Haptics && Platform.OS !== 'web') Haptics.selectionAsync(); };
+
+export default function StationList({ stations, mode, onSelect, saved, onToggleSave, scroll = true }) {
+  const c = useTheme();
+  const styles = useMemo(() => makeStyles(c), [c]);
+
   const renderItem = ({ item: s }) => {
     const level = availabilityLevel(s, mode);
+    const lc = levelColor(c, level);
     const count = mode === 'dock' ? s.docks : s.bikes;
     const isHome = saved?.homeId === s.id;
     const isWork = saved?.workId === s.id;
     return (
       <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => onSelect && onSelect(s)}>
-        {/* Availability badge */}
-        <View style={[styles.badge, { backgroundColor: COLOR_BG[level] }]}>
-          <Text style={[styles.badgeNum, { color: COLORS[level] }]}>{count}</Text>
-          <Text style={[styles.badgeLabel, { color: COLORS[level] }]}>{mode === 'dock' ? 'docks' : 'bikes'}</Text>
+        <View style={[styles.badge, { backgroundColor: lc.bg }]}>
+          <Text style={[styles.badgeNum, { color: lc.fg }]}>{count}</Text>
+          <Text style={[styles.badgeLabel, { color: lc.fg }]}>{mode === 'dock' ? 'docks' : 'bikes'}</Text>
         </View>
 
-        {/* Body */}
         <View style={styles.body}>
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>{s.name}</Text>
-            {isHome && <Ionicons name="home" size={13} color={colors.primary} style={styles.nameIcon} />}
-            {isWork && <Ionicons name="briefcase" size={13} color={colors.primary} style={styles.nameIcon} />}
+            {isHome && <Ionicons name="home" size={12} color={c.primary} style={styles.nameIcon} />}
+            {isWork && <Ionicons name="briefcase" size={12} color={c.primary} style={styles.nameIcon} />}
           </View>
+          <OccupancyBar classic={s.classic} ebikes={s.ebikes} docks={s.docks} c={c} />
           <Text style={styles.meta} numberOfLines={1}>
             {formatDistance(s.distance)} · {s.classic} reg · {s.ebikes} elec · {s.docks} docks
-            {s.disabledBikes ? ` · ${s.disabledBikes} down` : ''}
+            {s.disabledBikes ? ` · ${s.disabledBikes} down` : ''} · {formatAge(s.lastReported)}
           </Text>
-          <Text style={styles.age}>updated {formatAge(s.lastReported)}</Text>
         </View>
 
-        {/* Save toggles */}
         {onToggleSave && (
           <View style={styles.saveCol}>
-            <TouchableOpacity
-              onPress={() => onToggleSave('home', s.id)}
-              style={[styles.saveBtn, isHome && styles.saveBtnOn]}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={isHome ? 'home' : 'home-outline'}
-                size={17}
-                color={isHome ? colors.onPrimary : colors.textMute}
-              />
+            <TouchableOpacity onPress={() => { tap(); onToggleSave('home', s.id); }} style={[styles.saveBtn, isHome && styles.saveBtnOn]} activeOpacity={0.7}>
+              <Ionicons name={isHome ? 'home' : 'home-outline'} size={16} color={isHome ? c.onPrimary : c.textMute} />
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={() => onToggleSave('work', s.id)}
-              style={[styles.saveBtn, isWork && styles.saveBtnOn]}
-              activeOpacity={0.7}
-            >
-              <Ionicons
-                name={isWork ? 'briefcase' : 'briefcase-outline'}
-                size={17}
-                color={isWork ? colors.onPrimary : colors.textMute}
-              />
+            <TouchableOpacity onPress={() => { tap(); onToggleSave('work', s.id); }} style={[styles.saveBtn, isWork && styles.saveBtnOn]} activeOpacity={0.7}>
+              <Ionicons name={isWork ? 'briefcase' : 'briefcase-outline'} size={16} color={isWork ? c.onPrimary : c.textMute} />
             </TouchableOpacity>
           </View>
         )}
@@ -69,34 +59,27 @@ export default function StationList({ stations, mode, onSelect, saved, onToggleS
       data={stations}
       keyExtractor={(s) => s.id}
       renderItem={renderItem}
+      scrollEnabled={scroll}
       ItemSeparatorComponent={() => <View style={styles.sep} />}
-      contentContainerStyle={{ paddingVertical: 6, paddingBottom: 28 }}
+      contentContainerStyle={{ paddingVertical: 4, paddingBottom: 28 }}
     />
   );
 }
 
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 10, paddingHorizontal: 14 },
-  badge: {
-    width: 52, height: 52, borderRadius: radius.md,
-    alignItems: 'center', justifyContent: 'center', marginRight: 12,
-  },
-  badgeNum: { fontSize: 20, fontWeight: '800', lineHeight: 22 },
-  badgeLabel: { fontSize: 10, fontWeight: '600', marginTop: -1 },
-  body: { flex: 1, paddingRight: 8 },
-  nameRow: { flexDirection: 'row', alignItems: 'center' },
-  nameIcon: { marginLeft: 6 },
-  name: { fontSize: 15, fontWeight: '700', color: colors.text, flexShrink: 1 },
-  meta: { fontSize: 12, color: colors.textMute, marginTop: 2 },
-  age: { fontSize: 11, color: colors.textFaint, marginTop: 1 },
-  saveCol: { flexDirection: 'row', gap: 4 },
-  saveBtn: {
-    width: 34, height: 34, borderRadius: radius.sm,
-    alignItems: 'center', justifyContent: 'center',
-    backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border,
-  },
-  saveBtnOn: { backgroundColor: colors.primary, borderColor: colors.primary },
-  saveTxt: { fontSize: 15, opacity: 0.5 },
-  saveTxtOn: { opacity: 1 },
-  sep: { height: 1, backgroundColor: colors.border, marginLeft: 78 },
-});
+function makeStyles(c) {
+  return StyleSheet.create({
+    row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 16 },
+    badge: { width: 50, height: 50, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
+    badgeNum: { fontSize: 19, fontFamily: font.bold, lineHeight: 22 },
+    badgeLabel: { fontSize: 10, fontFamily: font.semibold, marginTop: -1 },
+    body: { flex: 1, paddingRight: 10, gap: 5 },
+    nameRow: { flexDirection: 'row', alignItems: 'center' },
+    nameIcon: { marginLeft: 6 },
+    name: { fontSize: 15, fontFamily: font.semibold, color: c.text, flexShrink: 1 },
+    meta: { fontSize: 11.5, color: c.textMute, fontFamily: font.regular },
+    saveCol: { flexDirection: 'row', gap: 4 },
+    saveBtn: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
+    saveBtnOn: { backgroundColor: c.primary, borderColor: c.primary },
+    sep: { height: 1, backgroundColor: c.hairline, marginLeft: 78 },
+  });
+}
