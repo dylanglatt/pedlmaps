@@ -96,6 +96,10 @@ export default function App() {
       </View>
     ) : (
       <View style={styles.browseHead}>
+        <View style={styles.statusLine}>
+          <View style={[styles.dot, { backgroundColor: statusColor }]} />
+          <Text style={styles.statusTxt} numberOfLines={1}>{statusText}</Text>
+        </View>
         <TouchableOpacity style={styles.search} onPress={openSearch} activeOpacity={0.8}>
           <Ionicons name="search" size={18} color={c.textMute} />
           <Text style={styles.searchTxt}>Where to?</Text>
@@ -122,20 +126,6 @@ export default function App() {
       ) : (
         <StationMap stations={all} center={center} mode={mode} selectedId={selectedId} onSelect={(s) => setSelectedId(s.id)} />
       )}
-
-      {/* Floating brand pill */}
-      <View style={styles.brandWrap} pointerEvents="box-none">
-        <View style={styles.brandCard}>
-          <Logo size={24} />
-          <View>
-            <Text style={styles.brand}>DockHop</Text>
-            <View style={styles.statusRow}>
-              <View style={[styles.dot, { backgroundColor: statusColor }]} />
-              <Text style={styles.status} numberOfLines={1}>{statusText}</Text>
-            </View>
-          </View>
-        </View>
-      </View>
 
       <BottomSheet index={sheetIndex} onIndexChange={setSheetIndex} renderHeader={Header}>
         {searching ? (
@@ -166,12 +156,9 @@ function makeStyles(c) {
     root: { flex: 1, backgroundColor: c.bg, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
     splash: { flex: 1, alignItems: 'center', justifyContent: 'center' },
 
-    brandWrap: { position: 'absolute', top: 0, left: 0, right: 0, paddingTop: Platform.OS === 'ios' ? 56 : 12, paddingHorizontal: 14, zIndex: 1100 },
-    brandCard: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 9, backgroundColor: c.elevated, borderRadius: radius.lg, paddingVertical: 8, paddingHorizontal: 12, ...shadow(c).card },
-    brand: { fontFamily: font.display, fontSize: 17, color: c.text, letterSpacing: -0.3 },
-    statusRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 1 },
-    dot: { width: 6, height: 6, borderRadius: 3 },
-    status: { fontSize: 11, color: c.textMute, fontFamily: font.medium },
+    dot: { width: 7, height: 7, borderRadius: 4 },
+    statusLine: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 2 },
+    statusTxt: { fontSize: 12, color: c.textMute, fontFamily: font.medium },
 
     browseHead: { paddingBottom: 10, gap: 10 },
     search: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surface, borderRadius: radius.pill, paddingVertical: 13, paddingHorizontal: 16 },
