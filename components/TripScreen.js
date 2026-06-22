@@ -277,7 +277,8 @@ export default function TripScreen({ stations, onStartNav }) {
             <View style={styles.divider} />
             <Step icon="walk" time={fmtMin(current.walkToBikeSec)} title={`Walk to ${current.originStation.name}`} sub={`${current.originStation.classic} regular · ${current.originStation.ebikes} electric`} styles={styles} c={c} />
             <Step icon="bike" time={fmtMin(current.rideSec)} title="Ride" sub={current.bikeType === 'ebike' ? 'on an e-bike' : 'on a classic bike'} styles={styles} c={c} />
-            <Step icon="dock" time={fmtMin(current.walkToDestSec)} title={`Dock at ${current.destStation.name}`} sub={`${current.destStation.docks} open docks`} last styles={styles} c={c} />
+            <Step icon="dock" title={`Dock at ${current.destStation.name}`} sub={`${current.destStation.docks} open docks`} styles={styles} c={c} />
+            <Step icon="walk" time={fmtMin(current.walkToDestSec)} title={`Walk to ${dest?.name || 'your destination'}`} last styles={styles} c={c} />
           </View>
 
           {/* Other routes — tap to select */}
@@ -323,7 +324,7 @@ function Step({ icon, time, title, sub, last, styles, c }) {
       <View style={styles.stepBody}>
         <View style={styles.stepTop}>
           <Text style={styles.stepTitle} numberOfLines={1}>{title}</Text>
-          <Text style={styles.stepTime}>{time}</Text>
+          {!!time && <Text style={styles.stepTime}>{time}</Text>}
         </View>
         {!!sub && <Text style={styles.stepSub}>{sub}</Text>}
       </View>
