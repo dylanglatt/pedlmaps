@@ -68,10 +68,10 @@ export default function AutocompleteInput({ value, onChangeText, onSelectPlace, 
 function makeStyles(c) {
   return StyleSheet.create({
     wrap: { position: 'relative', zIndex: 20 },
-    input: { borderWidth: 1, borderColor: c.border, borderRadius: radius.md, padding: 13, fontSize: 15, color: c.text, backgroundColor: c.elevated, fontFamily: font.regular },
+    input: { borderWidth: 1, borderColor: c.border, borderRadius: radius.md, padding: 13, fontSize: 15, color: c.text, backgroundColor: c.elevated, fontWeight: '400' },
     drop: { position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: c.elevated, borderWidth: 1, borderColor: c.border, borderRadius: radius.md, overflow: 'hidden', zIndex: 30, ...shadow(c).pop },
     item: { paddingVertical: 11, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: c.hairline },
-    primary: { fontSize: 15, color: c.text, fontFamily: font.semibold },
-    secondary: { fontSize: 12, color: c.textMute, marginTop: 1, fontFamily: font.regular },
+    primary: { fontSize: 15, color: c.text, fontWeight: '600' },
+    secondary: { fontSize: 12, color: c.textMute, marginTop: 1, fontWeight: '400' },
   });
 }

@@ -1,37 +1,41 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, Platform, StatusBar,
+  View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, StatusBar,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import { useFonts } from 'expo-font';
-import { Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold } from '@expo-google-fonts/inter';
-import { SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold } from '@expo-google-fonts/space-grotesk';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as SplashScreen from 'expo-splash-screen';
 
 import StationMap from './components/StationMap';
 import StationList from './components/StationList';
 import TripScreen from './components/TripScreen';
 import BottomSheet from './components/BottomSheet';
 import NavScreen from './components/NavScreen';
-import Logo from './components/Logo';
+import Icon from './components/Icon';
 import { fetchStations, nearest } from './lib/gbfs';
 import { getLocation, DEFAULT_CENTER } from './lib/location';
 import { loadSaved, saveSaved } from './lib/storage';
 import { formatAge } from './lib/geo';
-import { useTheme, radius, font, shadow } from './lib/theme';
+import { useTheme, radius, shadow } from './lib/theme';
 
+SplashScreen.preventAutoHideAsync().catch(() => {});
 const REFRESH_MS = 45000;
 
 export default function App() {
+  return (
+    <SafeAreaProvider>
+      <AppInner />
+    </SafeAreaProvider>
+  );
+}
+
+function AppInner() {
   const c = useTheme();
-  const [fontsLoaded] = useFonts({
-    Inter_400Regular, Inter_500Medium, Inter_600SemiBold, Inter_700Bold,
-    SpaceGrotesk_600SemiBold, SpaceGrotesk_700Bold,
-  });
+  const insets = useSafeAreaInsets();
 
   const [all, setAll] = useState([]);
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [mode, setMode] = useState('bike');
-  const [bikeType, setBikeType] = useState('both'); // 'both' | 'classic' | 'electric'
+  const [bikeType, setBikeType] = useState('both');
   const [selectedId, setSelectedId] = useState(null);
   const [saved, setSaved] = useState({ homeId: null, workId: null });
   const [loading, setLoading] = useState(true);
@@ -54,6 +58,7 @@ export default function App() {
     (async () => {
       const [loc, sv] = await Promise.all([getLocation(), loadSaved()]);
       setCenter(loc); setSaved(sv); await refresh();
+      SplashScreen.hideAsync().catch(() => {});
     })();
     timer.current = setInterval(refresh, REFRESH_MS);
     return () => clearInterval(timer.current);
@@ -75,15 +80,6 @@ export default function App() {
 
   const styles = useMemo(() => makeStyles(c), [c]);
 
-  if (!fontsLoaded) {
-    return (
-      <View style={[styles.splash, { backgroundColor: c.bg }]}>
-        <Logo size={56} />
-        <ActivityIndicator color={c.primary} style={{ marginTop: 16 }} />
-      </View>
-    );
-  }
-
   const statusColor = error ? c.danger : loading ? c.textFaint : c.good;
   const statusText = error ? 'Offline' : loading ? 'Loading…' : `${stations.length} nearby · ${formatAge(Math.floor((updatedAt || Date.now()) / 1000))}`;
 
@@ -102,7 +98,7 @@ export default function App() {
           <Text style={styles.statusTxt} numberOfLines={1}>{statusText}</Text>
         </View>
         <TouchableOpacity style={styles.search} onPress={openSearch} activeOpacity={0.8}>
-          <Ionicons name="search" size={18} color={c.textMute} />
+          <Icon name="search" size={18} color={c.textMute} />
           <Text style={styles.searchTxt}>Where to?</Text>
         </TouchableOpacity>
         <View style={styles.seg}>
@@ -116,11 +112,11 @@ export default function App() {
           <View style={styles.typeRow}>
             {[
               { k: 'both', label: 'Both', icon: null },
-              { k: 'classic', label: 'Classic', icon: 'bicycle' },
-              { k: 'electric', label: 'Electric', icon: 'flash' },
+              { k: 'classic', label: 'Classic', icon: 'bike' },
+              { k: 'electric', label: 'Electric', icon: 'bolt' },
             ].map((o) => (
               <TouchableOpacity key={o.k} style={[styles.chip, bikeType === o.k && styles.chipOn]} onPress={() => setBikeType(o.k)} activeOpacity={0.8}>
-                {o.icon && <Ionicons name={o.icon} size={13} color={bikeType === o.k ? c.onPrimary : c.textMute} />}
+                {o.icon && <Icon name={o.icon} size={13} color={bikeType === o.k ? c.onPrimary : c.textMute} />}
                 <Text style={[styles.chipTxt, bikeType === o.k && styles.chipTxtOn]}>{o.label}</Text>
               </TouchableOpacity>
             ))}
@@ -142,7 +138,7 @@ export default function App() {
         <StationMap stations={all} center={center} mode={mode} bikeType={bikeType} selectedId={selectedId} onSelect={(s) => setSelectedId(s.id)} />
       )}
 
-      <BottomSheet index={sheetIndex} onIndexChange={setSheetIndex} renderHeader={Header}>
+      <BottomSheet index={sheetIndex} onIndexChange={setSheetIndex} renderHeader={Header} bottomInset={insets.bottom}>
         {searching ? (
           <TripScreen stations={all} onStartNav={setNavTrip} />
         ) : !loading && stations.length === 0 ? (
@@ -169,34 +165,32 @@ export default function App() {
 
 function makeStyles(c) {
   return StyleSheet.create({
-    root: { flex: 1, backgroundColor: c.bg, paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0 },
-    splash: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-
+    root: { flex: 1, backgroundColor: c.bg },
     dot: { width: 7, height: 7, borderRadius: 4 },
     statusLine: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 2 },
-    statusTxt: { fontSize: 12, color: c.textMute, fontFamily: font.medium },
+    statusTxt: { fontSize: 12, color: c.textMute, fontWeight: '500' },
 
     browseHead: { paddingBottom: 10, gap: 10 },
     search: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surface, borderRadius: radius.pill, paddingVertical: 13, paddingHorizontal: 16 },
-    searchTxt: { fontSize: 16, color: c.textMute, fontFamily: font.medium },
+    searchTxt: { fontSize: 16, color: c.textMute, fontWeight: '500' },
     seg: { flexDirection: 'row', backgroundColor: c.surfaceAlt, borderRadius: radius.md, padding: 3 },
     segItem: { flex: 1, paddingVertical: 7, borderRadius: radius.sm, alignItems: 'center' },
     segItemOn: { backgroundColor: c.elevated, ...shadow(c).card },
-    segTxt: { fontSize: 14, color: c.textMute, fontFamily: font.semibold },
+    segTxt: { fontSize: 14, color: c.textMute, fontWeight: '600' },
     segTxtOn: { color: c.text },
 
     typeRow: { flexDirection: 'row', gap: 8 },
     chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
     chipOn: { backgroundColor: c.primary, borderColor: c.primary },
-    chipTxt: { fontSize: 13, fontFamily: font.semibold, color: c.textMute },
+    chipTxt: { fontSize: 13, fontWeight: '600', color: c.textMute },
     chipTxtOn: { color: c.onPrimary },
 
     planHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10 },
-    planTitle: { fontFamily: font.display, fontSize: 18, color: c.text },
-    cancel: { fontFamily: font.semibold, fontSize: 15, color: c.primary },
+    planTitle: { fontWeight: '800', fontSize: 18, color: c.text },
+    cancel: { fontWeight: '600', fontSize: 15, color: c.primary },
 
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 8 },
-    centerTxt: { fontSize: 13, color: c.textMute, textAlign: 'center', fontFamily: font.regular },
-    emptyTitle: { fontSize: 16, fontFamily: font.semibold, color: c.text },
+    centerTxt: { fontSize: 13, color: c.textMute, textAlign: 'center', fontWeight: '400' },
+    emptyTitle: { fontSize: 16, fontWeight: '600', color: c.text },
   });
 }

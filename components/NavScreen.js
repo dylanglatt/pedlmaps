@@ -1,21 +1,22 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Platform, Modal, Switch,
-  PanResponder, LayoutAnimation, UIManager,
+  View, Text, TouchableOpacity, StyleSheet, Modal, Switch,
+  PanResponder, LayoutAnimation, UIManager, Platform,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Circle } from 'react-native-svg';
+import Icon from './Icon';
 import RouteMap from './RouteMap';
 import { nav } from '../lib/voiceNav';
 import { fmtMiles } from '../lib/tripPlanner';
 import { formatClock } from '../lib/geo';
-import { useTheme, radius, font, shadow } from '../lib/theme';
+import { useTheme, radius, shadow } from '../lib/theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-// Apple-style route-overview glyph: hollow start, curve, filled end.
+// Route-overview glyph (Apple-style): hollow start, curve, filled end.
 function RouteIcon({ color, size = 22 }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
@@ -26,22 +27,42 @@ function RouteIcon({ color, size = 22 }) {
   );
 }
 
-function arrowFor(text = '') {
-  const t = text.toLowerCase();
-  if (t.includes('left')) return 'arrow-back';
-  if (t.includes('right')) return 'arrow-forward';
-  if (t.includes('arriv') || t.includes('dock')) return 'flag';
-  if (t.includes('undock') || t.includes('riding')) return 'bicycle';
-  return 'arrow-up';
+const MAN = {
+  'turn-left': 'turnLeft', 'turn-right': 'turnRight',
+  'turn-slight-left': 'slightLeft', 'turn-slight-right': 'slightRight',
+  'turn-sharp-left': 'turnLeft', 'turn-sharp-right': 'turnRight',
+  'uturn-left': 'uturn', 'uturn-right': 'uturn',
+  'roundabout-left': 'turnLeft', 'roundabout-right': 'turnRight',
+  straight: 'straight', merge: 'straight',
+  'ramp-left': 'slightLeft', 'ramp-right': 'slightRight',
+  'fork-left': 'slightLeft', 'fork-right': 'slightRight',
+  'keep-left': 'slightLeft', 'keep-right': 'slightRight',
+};
+function manIcon(step) {
+  if (!step) return 'straight';
+  if (step.maneuver && MAN[step.maneuver]) return MAN[step.maneuver];
+  const t = (step.instruction || '').toLowerCase();
+  if (t.includes('arriv') || t.includes('dock')) return 'arrive';
+  if (t.includes('undock') || t.includes('riding')) return 'bike';
+  if (t.includes('left')) return 'turnLeft';
+  if (t.includes('right')) return 'turnRight';
+  return 'straight';
+}
+function fmtDist(m) {
+  if (m == null || !isFinite(m)) return null;
+  if (m < 400) return `${Math.max(10, Math.round((m * 3.281) / 10) * 10)} ft`;
+  return `${(m / 1609.34).toFixed(1)} mi`;
 }
 
 export default function NavScreen({ trip, onEnd }) {
   const c = useTheme();
+  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(c), [c]);
   const { plan, route, dest } = trip;
 
   const [cur, setCur] = useState(route.maneuvers?.[0] || null);
   const [next, setNext] = useState(route.maneuvers?.[1] || null);
+  const [dist, setDist] = useState(null);
   const [here, setHere] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [overview, setOverview] = useState(false);
@@ -55,9 +76,9 @@ export default function NavScreen({ trip, onEnd }) {
       maneuvers: route.maneuvers,
       routeCoords: route.coords,
       intro: `Starting route to ${dest?.name || dest?.label || 'your destination'}.`,
-      onProgress: ({ maneuver, next: nx }) => { setCur(maneuver); setNext(nx); },
+      onProgress: ({ maneuver, next: nx, distance }) => { setCur(maneuver); setNext(nx); setDist(distance); },
       onLocationUpdate: (h) => setHere(h),
-      onArrive: () => { setCur({ instruction: 'You have arrived.' }); setNext(null); },
+      onArrive: () => { setCur({ instruction: 'You have arrived.' }); setNext(null); setDist(null); },
     });
     tick.current = setInterval(() => {
       setMinLeft(Math.max(0, Math.round((arrival.getTime() - Date.now()) / 60000)));
@@ -86,6 +107,7 @@ export default function NavScreen({ trip, onEnd }) {
     { lat: plan.destStation.lat, lon: plan.destStation.lon, title: 'Dock', color: c.danger },
     ...(dest ? [{ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.primary }] : []),
   ];
+  const distLabel = fmtDist(dist);
 
   return (
     <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={() => { nav.stop(); onEnd && onEnd(); }}>
@@ -93,32 +115,35 @@ export default function NavScreen({ trip, onEnd }) {
         <RouteMap coords={route.coords} markers={markers} fill follow={overview ? null : here} overview={overview} showUser />
 
         {/* Top maneuver banner */}
-        <View style={styles.banner}>
+        <View style={[styles.banner, { top: insets.top + 8 }]}>
           <View style={styles.bannerMain}>
-            <Ionicons name={arrowFor(cur?.instruction)} size={30} color="#fff" />
-            <Text style={styles.bannerTxt} numberOfLines={2}>{cur?.instruction || 'Starting…'}</Text>
+            <Icon name={manIcon(cur)} size={30} color="#fff" weight="semibold" />
+            <View style={styles.flex}>
+              {distLabel && <Text style={styles.bannerDist}>{distLabel}</Text>}
+              <Text style={styles.bannerTxt} numberOfLines={2}>{cur?.instruction || 'Starting…'}</Text>
+            </View>
           </View>
           {next && (
             <View style={styles.bannerNext}>
-              <Ionicons name={arrowFor(next.instruction)} size={16} color="rgba(255,255,255,0.7)" />
+              <Icon name={manIcon(next)} size={15} color="rgba(255,255,255,0.7)" />
               <Text style={styles.bannerNextTxt} numberOfLines={1}>Then {next.instruction}</Text>
             </View>
           )}
         </View>
 
-        {/* Floating map controls (grouped, Apple-style) */}
+        {/* Floating map controls */}
         <View style={styles.fab}>
           <TouchableOpacity style={styles.fabBtn} onPress={() => setOverview((o) => !o)} activeOpacity={0.7}>
             <RouteIcon color={overview ? c.primary : c.text} size={22} />
           </TouchableOpacity>
           <View style={styles.fabSep} />
           <TouchableOpacity style={styles.fabBtn} onPress={() => setVoice(!voiceOn)} activeOpacity={0.7}>
-            <Ionicons name={voiceOn ? 'volume-high' : 'volume-mute'} size={20} color={voiceOn ? c.primary : c.textMute} />
+            <Icon name={voiceOn ? 'volumeOn' : 'volumeOff'} size={20} color={voiceOn ? c.primary : c.textMute} />
           </TouchableOpacity>
         </View>
 
         {/* Bottom swipe-up panel */}
-        <View style={styles.bottom}>
+        <View style={[styles.bottom, { paddingBottom: insets.bottom + 14 }]}>
           <View {...pan.panHandlers} style={styles.grip}>
             <View style={styles.handle} />
             <View style={styles.stats}>
@@ -131,11 +156,11 @@ export default function NavScreen({ trip, onEnd }) {
           {expanded && (
             <View style={styles.expand}>
               <View style={styles.optRow}>
-                <Ionicons name="star" size={18} color={c.primary} />
+                <Icon name="star" size={18} color={c.primary} />
                 <Text style={styles.optTxt} numberOfLines={1}>{dest?.name || dest?.label || 'Destination'}</Text>
               </View>
               <View style={styles.optRow}>
-                <Ionicons name={voiceOn ? 'volume-high' : 'volume-mute'} size={18} color={c.textMute} />
+                <Icon name={voiceOn ? 'volumeOn' : 'volumeOff'} size={18} color={c.textMute} />
                 <Text style={styles.optTxt}>Voice guidance</Text>
                 <Switch value={voiceOn} onValueChange={setVoice} trackColor={{ true: c.primary }} />
               </View>
@@ -162,14 +187,16 @@ function Stat({ big, label, styles }) {
 function makeStyles(c) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: c.bg },
+    flex: { flex: 1 },
     banner: {
-      position: 'absolute', top: Platform.OS === 'ios' ? 56 : 20, left: 12, right: 12,
+      position: 'absolute', left: 12, right: 12,
       backgroundColor: '#1B2230', borderRadius: radius.lg, padding: 14, ...shadow(c).pop,
     },
     bannerMain: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-    bannerTxt: { flex: 1, color: '#fff', fontSize: 20, fontFamily: font.bold },
+    bannerDist: { color: '#fff', fontSize: 13, fontWeight: '700', opacity: 0.7, marginBottom: 1, fontVariant: ['tabular-nums'] },
+    bannerTxt: { color: '#fff', fontSize: 20, fontWeight: '800' },
     bannerNext: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
-    bannerNextTxt: { color: 'rgba(255,255,255,0.75)', fontSize: 14, fontFamily: font.medium, flex: 1 },
+    bannerNextTxt: { color: 'rgba(255,255,255,0.75)', fontSize: 14, fontWeight: '500', flex: 1 },
 
     fab: { position: 'absolute', right: 14, top: '42%', backgroundColor: c.elevated, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, overflow: 'hidden', ...shadow(c).card },
     fabBtn: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center' },
@@ -177,20 +204,19 @@ function makeStyles(c) {
 
     bottom: {
       position: 'absolute', bottom: 0, left: 0, right: 0,
-      backgroundColor: c.elevated, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl,
-      paddingBottom: Platform.OS === 'ios' ? 34 : 18, ...shadow(c).pop,
+      backgroundColor: c.elevated, borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl, ...shadow(c).pop,
     },
     grip: { paddingTop: 8, paddingHorizontal: 20 },
     handle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: c.border, marginBottom: 12 },
     stats: { flexDirection: 'row', justifyContent: 'space-around', paddingBottom: 8 },
     stat: { alignItems: 'center' },
-    statBig: { fontSize: 22, fontFamily: font.display, color: c.text },
-    statLabel: { fontSize: 12, color: c.textMute, fontFamily: font.medium, marginTop: 1 },
+    statBig: { fontSize: 22, fontWeight: '800', color: c.text, fontVariant: ['tabular-nums'] },
+    statLabel: { fontSize: 12, color: c.textMute, fontWeight: '500', marginTop: 1 },
 
     expand: { paddingHorizontal: 20, paddingTop: 6, gap: 4 },
     optRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.surface, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 13, marginBottom: 8 },
-    optTxt: { flex: 1, fontSize: 15, color: c.text, fontFamily: font.semibold },
+    optTxt: { flex: 1, fontSize: 15, color: c.text, fontWeight: '600' },
     end: { backgroundColor: c.danger, borderRadius: radius.md, paddingVertical: 15, alignItems: 'center', marginTop: 4 },
-    endTxt: { color: '#fff', fontSize: 17, fontFamily: font.bold },
+    endTxt: { color: '#fff', fontSize: 17, fontWeight: '800' },
   });
 }

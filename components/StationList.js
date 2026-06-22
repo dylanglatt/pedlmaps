@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Platform } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from './Icon';
 import { availabilityLevel, countFor } from '../lib/gbfs';
 import { formatDistance, formatAge } from '../lib/geo';
 import { useTheme, levelColor, radius, font } from '../lib/theme';
@@ -33,8 +33,8 @@ export default function StationList({ stations, mode, bikeType = 'both', onSelec
         <View style={styles.body}>
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>{s.name}</Text>
-            {isHome && <Ionicons name="home" size={12} color={c.primary} style={styles.nameIcon} />}
-            {isWork && <Ionicons name="briefcase" size={12} color={c.primary} style={styles.nameIcon} />}
+            {isHome && <Icon name="home" size={12} color={c.primary} style={styles.nameIcon} />}
+            {isWork && <Icon name="work" size={12} color={c.primary} style={styles.nameIcon} />}
           </View>
           <OccupancyBar classic={s.classic} ebikes={s.ebikes} docks={s.docks} c={c} />
           <Text style={styles.meta} numberOfLines={1}>
@@ -46,10 +46,10 @@ export default function StationList({ stations, mode, bikeType = 'both', onSelec
         {onToggleSave && (
           <View style={styles.saveCol}>
             <TouchableOpacity onPress={() => { tap(); onToggleSave('home', s.id); }} style={[styles.saveBtn, isHome && styles.saveBtnOn]} activeOpacity={0.7}>
-              <Ionicons name={isHome ? 'home' : 'home-outline'} size={16} color={isHome ? c.onPrimary : c.textMute} />
+              <Icon name="home" size={16} color={isHome ? c.onPrimary : c.textMute} />
             </TouchableOpacity>
             <TouchableOpacity onPress={() => { tap(); onToggleSave('work', s.id); }} style={[styles.saveBtn, isWork && styles.saveBtnOn]} activeOpacity={0.7}>
-              <Ionicons name={isWork ? 'briefcase' : 'briefcase-outline'} size={16} color={isWork ? c.onPrimary : c.textMute} />
+              <Icon name="work" size={16} color={isWork ? c.onPrimary : c.textMute} />
             </TouchableOpacity>
           </View>
         )}
@@ -73,13 +73,13 @@ function makeStyles(c) {
   return StyleSheet.create({
     row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, paddingHorizontal: 16 },
     badge: { width: 50, height: 50, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-    badgeNum: { fontSize: 19, fontFamily: font.bold, lineHeight: 22 },
-    badgeLabel: { fontSize: 10, fontFamily: font.semibold, marginTop: -1 },
+    badgeNum: { fontSize: 19, fontWeight: '800', lineHeight: 22, fontVariant: ['tabular-nums'] },
+    badgeLabel: { fontSize: 10, fontWeight: '600', marginTop: -1 },
     body: { flex: 1, paddingRight: 10, gap: 5 },
     nameRow: { flexDirection: 'row', alignItems: 'center' },
     nameIcon: { marginLeft: 6 },
-    name: { fontSize: 15, fontFamily: font.semibold, color: c.text, flexShrink: 1 },
-    meta: { fontSize: 11.5, color: c.textMute, fontFamily: font.regular },
+    name: { fontSize: 15, fontWeight: '600', color: c.text, flexShrink: 1 },
+    meta: { fontSize: 11.5, color: c.textMute, fontWeight: '400' },
     saveCol: { flexDirection: 'row', gap: 4 },
     saveBtn: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
     saveBtnOn: { backgroundColor: c.primary, borderColor: c.primary },

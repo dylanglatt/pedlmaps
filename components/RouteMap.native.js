@@ -31,7 +31,8 @@ export default function RouteMap({ coords, markers, fill, follow, overview, show
       showsUserLocation={!!showUser}
       initialRegion={region(coords)}
     >
-      <Polyline coordinates={pts} strokeColor="#5B53E6" strokeWidth={6} />
+      <Polyline coordinates={pts} strokeColor="#3B34B8" strokeWidth={9} lineCap="round" lineJoin="round" />
+      <Polyline coordinates={pts} strokeColor="#5B53E6" strokeWidth={6} lineCap="round" lineJoin="round" />
       {(markers || []).map((m, i) => (
         <Marker key={i} coordinate={{ latitude: m.lat, longitude: m.lon }} title={m.title} pinColor={m.color} />
       ))}

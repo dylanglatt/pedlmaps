@@ -4,7 +4,7 @@ import { useTheme, radius, shadow } from '../lib/theme';
 
 // Controlled draggable sheet. `index` selects a snap point (0 peek, 1 mid, 2 full);
 // dragging reports the new nearest snap via onIndexChange.
-export default function BottomSheet({ index = 1, onIndexChange, renderHeader, children }) {
+export default function BottomSheet({ index = 1, onIndexChange, renderHeader, children, bottomInset = 0 }) {
   const c = useTheme();
   const { height } = useWindowDimensions();
   const MAX = Math.round(height * 0.9);
@@ -46,7 +46,7 @@ export default function BottomSheet({ index = 1, onIndexChange, renderHeader, ch
         <View style={styles.handle} />
         {renderHeader && renderHeader()}
       </View>
-      <View style={styles.content}>{children}</View>
+      <View style={[styles.content, { paddingBottom: bottomInset }]}>{children}</View>
     </Animated.View>
   );
 }

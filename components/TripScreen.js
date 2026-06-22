@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator,
   StyleSheet, Platform, Keyboard,
 } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from './Icon';
 import { directions, WALK, BIKE } from '../lib/routing';
 import { autocomplete, placeDetails } from '../lib/places';
 import { planTrip, fmtMin, fmtMiles } from '../lib/tripPlanner';
@@ -170,18 +170,18 @@ export default function TripScreen({ stations, onStartNav }) {
         {/* From / To editor */}
         <View style={styles.odCard}>
           <TouchableOpacity style={[styles.odRow, editing === 'from' && styles.odRowActive]} onPress={() => setEditing('from')} activeOpacity={0.7}>
-            <Ionicons name="navigate-circle" size={20} color={c.primary} />
+            <Icon name="start" size={20} color={c.primary} />
             <Text style={styles.odTxt} numberOfLines={1}>{originName || 'Choose start'}</Text>
           </TouchableOpacity>
           <View style={styles.odDivider} />
           <TouchableOpacity style={[styles.odRow, editing === 'to' && styles.odRowActive]} onPress={() => setEditing('to')} activeOpacity={0.7}>
-            <Ionicons name="location" size={20} color={c.danger} />
+            <Icon name="pin" size={20} color={c.danger} />
             <Text style={styles.odTxt} numberOfLines={1}>{dest?.name || 'Choose destination'}</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.searchBar}>
-          <Ionicons name="search" size={18} color={c.textMute} />
+          <Icon name="search" size={18} color={c.textMute} />
           <TextInput
             style={styles.searchInput}
             placeholder={editing === 'from' ? 'Choose start' : 'Search for a place'}
@@ -194,12 +194,12 @@ export default function TripScreen({ stations, onStartNav }) {
           />
           {query.length > 0 && (
             <TouchableOpacity onPress={() => { setQuery(''); setSugs([]); }} hitSlop={8}>
-              <Ionicons name="close-circle" size={18} color={c.textFaint} />
+              <Icon name="clear" size={18} color={c.textFaint} />
             </TouchableOpacity>
           )}
         </View>
 
-        {error && <Text style={styles.err}>⚠ {error}</Text>}
+        {error && <View style={styles.errRow}><Icon name="warning" size={14} color={c.danger} /><Text style={styles.err}>{error}</Text></View>}
 
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
           {showRecents ? (
@@ -214,13 +214,13 @@ export default function TripScreen({ stations, onStartNav }) {
                 </View>
               )}
               {recents.map((r, i) => (
-                <Row key={i} icon="time-outline" title={r.name || r.label} sub={r.address} styles={styles} c={c}
+                <Row key={i} icon="time" title={r.name || r.label} sub={r.address} styles={styles} c={c}
                   onPress={() => choose(r)} onRemove={() => onRemoveRecent(r)} />
               ))}
             </>
           ) : (
             sugs.map((s) => (
-              <Row key={s.placeId} icon="location-outline" title={s.primary} sub={s.secondary} styles={styles} c={c} onPress={() => choose(s)} />
+              <Row key={s.placeId} icon="pin" title={s.primary} sub={s.secondary} styles={styles} c={c} onPress={() => choose(s)} />
             ))
           )}
         </ScrollView>
@@ -235,15 +235,15 @@ export default function TripScreen({ stations, onStartNav }) {
       {/* From / To (tap to edit) */}
       <View style={styles.odCard}>
         <TouchableOpacity style={styles.odRow} onPress={() => editField('from')} activeOpacity={0.7}>
-          <Ionicons name="navigate-circle" size={20} color={c.primary} />
+          <Icon name="start" size={20} color={c.primary} />
           <Text style={styles.odTxt} numberOfLines={1}>{origin?.current ? 'My Location' : origin?.name}</Text>
-          <Ionicons name="chevron-forward" size={16} color={c.textFaint} />
+          <Icon name="forward" size={16} color={c.textFaint} />
         </TouchableOpacity>
         <View style={styles.odDivider} />
         <TouchableOpacity style={styles.odRow} onPress={() => editField('to')} activeOpacity={0.7}>
-          <Ionicons name="location" size={20} color={c.danger} />
+          <Icon name="pin" size={20} color={c.danger} />
           <Text style={styles.odTxt} numberOfLines={1}>{dest?.name}</Text>
-          <Ionicons name="chevron-forward" size={16} color={c.textFaint} />
+          <Icon name="forward" size={16} color={c.textFaint} />
         </TouchableOpacity>
       </View>
 
@@ -256,7 +256,7 @@ export default function TripScreen({ stations, onStartNav }) {
       </View>
 
       {busy && <ActivityIndicator color={c.primary} style={{ marginTop: 20 }} />}
-      {error && <Text style={styles.err}>⚠ {error}</Text>}
+      {error && <View style={styles.errRow}><Icon name="warning" size={14} color={c.danger} /><Text style={styles.err}>{error}</Text></View>}
 
       {route && <View style={{ marginTop: 14 }}><RouteMap coords={route.coords} markers={markers} /></View>}
 
@@ -275,9 +275,9 @@ export default function TripScreen({ stations, onStartNav }) {
               </TouchableOpacity>
             </View>
             <View style={styles.divider} />
-            <Step icon="🚶" time={fmtMin(current.walkToBikeSec)} title={`Walk to ${current.originStation.name}`} sub={`${current.originStation.classic} regular · ${current.originStation.ebikes} electric`} styles={styles} />
-            <Step icon="🚲" time={fmtMin(current.rideSec)} title="Ride" sub={current.bikeType === 'ebike' ? 'on an e-bike' : 'on a classic bike'} styles={styles} />
-            <Step icon="🅿️" time={fmtMin(current.walkToDestSec)} title={`Dock at ${current.destStation.name}`} sub={`${current.destStation.docks} open docks`} last styles={styles} />
+            <Step icon="walk" time={fmtMin(current.walkToBikeSec)} title={`Walk to ${current.originStation.name}`} sub={`${current.originStation.classic} regular · ${current.originStation.ebikes} electric`} styles={styles} c={c} />
+            <Step icon="bike" time={fmtMin(current.rideSec)} title="Ride" sub={current.bikeType === 'ebike' ? 'on an e-bike' : 'on a classic bike'} styles={styles} c={c} />
+            <Step icon="dock" time={fmtMin(current.walkToDestSec)} title={`Dock at ${current.destStation.name}`} sub={`${current.destStation.docks} open docks`} last styles={styles} c={c} />
           </View>
 
           {/* Other routes — tap to select */}
@@ -285,7 +285,7 @@ export default function TripScreen({ stations, onStartNav }) {
             <TouchableOpacity key={i} style={styles.altCard} onPress={() => selectPlan(i)} activeOpacity={0.7}>
               <Text style={styles.altMin}>{fmtMin(p.totalSec)}</Text>
               <Text style={styles.altTxt} numberOfLines={1}>via {p.originStation.name} → {p.destStation.name}</Text>
-              <Ionicons name="chevron-forward" size={16} color={c.textFaint} />
+              <Icon name="forward" size={16} color={c.textFaint} />
             </TouchableOpacity>
           ))}
         </>
@@ -298,7 +298,7 @@ function Row({ icon, title, sub, onPress, onRemove, styles, c }) {
   return (
     <View style={styles.row}>
       <TouchableOpacity style={styles.rowMain} onPress={onPress} activeOpacity={0.7}>
-        <View style={styles.rowIcon}><Ionicons name={icon} size={18} color={c.textMute} /></View>
+        <View style={styles.rowIcon}><Icon name={icon} size={18} color={c.textMute} /></View>
         <View style={styles.flex}>
           <Text style={styles.rowTitle} numberOfLines={1}>{title}</Text>
           {!!sub && <Text style={styles.rowSub} numberOfLines={1}>{sub}</Text>}
@@ -306,18 +306,18 @@ function Row({ icon, title, sub, onPress, onRemove, styles, c }) {
       </TouchableOpacity>
       {onRemove && (
         <TouchableOpacity onPress={onRemove} hitSlop={8} style={styles.rowRemove}>
-          <Ionicons name="close" size={16} color={c.textFaint} />
+          <Icon name="close" size={16} color={c.textFaint} />
         </TouchableOpacity>
       )}
     </View>
   );
 }
 
-function Step({ icon, time, title, sub, last, styles }) {
+function Step({ icon, time, title, sub, last, styles, c }) {
   return (
     <View style={styles.step}>
       <View style={styles.stepRail}>
-        <Text style={styles.stepIcon}>{icon}</Text>
+        <Icon name={icon} size={17} color={c.text} />
         {!last && <View style={styles.stepLine} />}
       </View>
       <View style={styles.stepBody}>
@@ -337,41 +337,42 @@ function makeStyles(c) {
     odCard: { marginHorizontal: 16, marginBottom: 10, backgroundColor: c.surface, borderRadius: radius.md, overflow: 'hidden' },
     odRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
     odRowActive: { backgroundColor: c.surfaceAlt },
-    odTxt: { flex: 1, fontSize: 15, color: c.text, fontFamily: font.semibold },
+    odTxt: { flex: 1, fontSize: 15, color: c.text, fontWeight: '600' },
     odDivider: { height: 1, backgroundColor: c.hairline, marginLeft: 44 },
 
     searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surface, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 11 : 6, marginHorizontal: 16, marginBottom: 8 },
-    searchInput: { flex: 1, fontSize: 16, color: c.text, fontFamily: font.regular },
+    searchInput: { flex: 1, fontSize: 16, color: c.text, fontWeight: '400' },
     sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
-    section: { fontSize: 12, fontFamily: font.bold, color: c.textMute, textTransform: 'uppercase', letterSpacing: 0.5 },
-    clear: { fontSize: 13, fontFamily: font.semibold, color: c.primary },
+    section: { fontSize: 12, fontWeight: '800', color: c.textMute, textTransform: 'uppercase', letterSpacing: 0.5 },
+    clear: { fontSize: 13, fontWeight: '600', color: c.primary },
 
     row: { flexDirection: 'row', alignItems: 'center' },
     rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingLeft: 16 },
     rowRemove: { padding: 14 },
     rowIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface },
-    rowTitle: { fontSize: 15, fontFamily: font.semibold, color: c.text },
-    rowSub: { fontSize: 12, color: c.textMute, fontFamily: font.regular, marginTop: 1 },
+    rowTitle: { fontSize: 15, fontWeight: '600', color: c.text },
+    rowSub: { fontSize: 12, color: c.textMute, fontWeight: '400', marginTop: 1 },
 
     prefRow: { flexDirection: 'row', gap: 6, marginTop: 4, marginHorizontal: 16, backgroundColor: c.surfaceAlt, borderRadius: radius.md, padding: 3 },
     pref: { flex: 1, paddingVertical: 8, borderRadius: radius.sm, alignItems: 'center' },
     prefOn: { backgroundColor: c.elevated, ...shadow(c).card },
-    prefTxt: { fontSize: 13, fontFamily: font.semibold, color: c.textMute },
+    prefTxt: { fontSize: 13, fontWeight: '600', color: c.textMute },
     prefTxtOn: { color: c.text },
-    err: { color: c.danger, marginTop: 10, marginHorizontal: 16, fontSize: 13, fontFamily: font.semibold },
+    errRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginHorizontal: 16 },
+    err: { color: c.danger, fontSize: 13, fontWeight: '600', flex: 1 },
 
     bestCard: { borderRadius: radius.lg, padding: 16, marginTop: 14, marginHorizontal: 16, backgroundColor: c.elevated, borderWidth: 1, borderColor: c.border, ...shadow(c).card },
     bestTop: { flexDirection: 'row', alignItems: 'center' },
-    bestMin: { fontSize: 28, fontFamily: font.display, color: c.text },
-    bestSub: { fontSize: 13, color: c.textMute, fontFamily: font.medium, marginTop: 2 },
-    bestType: { fontSize: 12, color: c.textFaint, fontFamily: font.regular, marginTop: 1 },
+    bestMin: { fontSize: 28, fontWeight: '800', color: c.text, fontVariant: ['tabular-nums'] },
+    bestSub: { fontSize: 13, color: c.textMute, fontWeight: '500', marginTop: 2, fontVariant: ['tabular-nums'] },
+    bestType: { fontSize: 12, color: c.textFaint, fontWeight: '400', marginTop: 1 },
     goBtn: { backgroundColor: c.good, width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', ...shadow(c).card },
-    goTxt: { color: '#fff', fontSize: 18, fontFamily: font.bold },
+    goTxt: { color: '#fff', fontSize: 18, fontWeight: '800' },
     divider: { height: 1, backgroundColor: c.hairline, marginVertical: 12 },
 
     altCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: radius.md, padding: 14, marginTop: 10, marginHorizontal: 16, backgroundColor: c.surface },
-    altMin: { fontSize: 17, fontFamily: font.bold, color: c.text },
-    altTxt: { flex: 1, fontSize: 13, color: c.textMute, fontFamily: font.regular },
+    altMin: { fontSize: 17, fontWeight: '800', color: c.text, fontVariant: ['tabular-nums'] },
+    altTxt: { flex: 1, fontSize: 13, color: c.textMute, fontWeight: '400' },
 
     step: { flexDirection: 'row' },
     stepRail: { width: 28, alignItems: 'center' },
@@ -379,8 +380,8 @@ function makeStyles(c) {
     stepLine: { flex: 1, width: 2, backgroundColor: c.border, marginVertical: 2 },
     stepBody: { flex: 1, paddingBottom: 12, paddingLeft: 4 },
     stepTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-    stepTitle: { fontSize: 15, fontFamily: font.semibold, color: c.text, flex: 1, paddingRight: 8 },
-    stepTime: { fontSize: 13, fontFamily: font.semibold, color: c.textMute },
-    stepSub: { fontSize: 12, color: c.textMute, marginTop: 1, fontFamily: font.regular },
+    stepTitle: { fontSize: 15, fontWeight: '600', color: c.text, flex: 1, paddingRight: 8 },
+    stepTime: { fontSize: 13, fontWeight: '600', color: c.textMute, fontVariant: ['tabular-nums'] },
+    stepSub: { fontSize: 12, color: c.textMute, marginTop: 1, fontWeight: '400' },
   });
 }

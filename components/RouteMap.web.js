@@ -31,7 +31,8 @@ export default function RouteMap({ coords, markers, fill, follow, overview }) {
     <div style={wrap}>
       <MapContainer bounds={bounds} style={{ height: '100%', width: '100%' }}>
         <TileLayer attribution="&copy; OpenStreetMap contributors" url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-        <Polyline positions={coords} pathOptions={{ color: '#5B53E6', weight: 6 }} />
+        <Polyline positions={coords} pathOptions={{ color: '#3B34B8', weight: 9, lineCap: 'round', lineJoin: 'round' }} />
+        <Polyline positions={coords} pathOptions={{ color: '#5B53E6', weight: 6, lineCap: 'round', lineJoin: 'round' }} />
         {(markers || []).map((m, i) => (
           <CircleMarker key={i} center={[m.lat, m.lon]} radius={7} pathOptions={{ color: '#fff', weight: 2, fillColor: m.color, fillOpacity: 1 }}>
             <Popup>{m.title}</Popup>
