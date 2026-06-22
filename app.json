@@ -6,6 +6,8 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
+    "runtimeVersion": { "policy": "appVersion" },
+    "updates": { "url": "https://u.expo.dev/8f994d05-f1d5-4f79-b314-7dcb32006f7f" },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
