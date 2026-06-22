@@ -1,102 +1,126 @@
-# Citi Bike Nearby — Expo app
+# Citi Bike Nav — Expo app
 
-A personal rider tool: live map of nearby Citi Bike stations, color-coded by bikes
-or docks, with an e-bike filter and saved home/work stations. One codebase runs on
-your **iPhone/Android** (via Expo Go) and on your **computer** (web) for fast testing.
+A personal rider tool for NYC Citi Bike:
 
-Built on the public Citi Bike GBFS feeds — no API key required.
+- **Nearby** — live map of stations color-coded by bikes or docks, e-bike filter,
+  and saved home/work stations.
+- **Plan a trip** — door-to-door routing that accounts for the walk to a station,
+  undocking, the ride, and docking at the *best* station near your destination
+  (only ones with an open dock), with **spoken turn-by-turn voice navigation**
+  (works with AirPods, screen off).
+
+One codebase runs on **iPhone/Android** and on your **computer** (web) for fast testing.
+Station data is the public Citi Bike GBFS feed (no key). Routing uses OpenRouteService
+(free key required — see below).
 
 ---
 
 ## What's in this folder
 
 ```
-App.js                       # main screen: controls, map, list, refresh loop
+App.js                       # tab switcher + Nearby screen (map, list, refresh)
 components/
   StationMap.native.js       # iOS/Android map (react-native-maps)
   StationMap.web.js          # web map (Leaflet) — RN-maps doesn't run on web
   StationList.js             # nearby list with save buttons
+  TripScreen.js              # trip planner UI + voice-nav controls
 lib/
   gbfs.js                    # fetch + join feeds, derived fields, color logic
   geo.js                     # distance + formatting helpers
   location.js                # cross-platform geolocation (web + native)
   storage.js                 # saved home/work (AsyncStorage)
+  config.js                  # ⚙️ your ORS key + tunables  (EDIT THIS)
+  routing.js                 # OpenRouteService: geocode / matrix / directions
+  tripPlanner.js             # picks best origin+dest station pair
+  voiceNav.js                # background location + expo-speech turn-by-turn
 ```
-
-> `StationMap` resolves automatically: Metro picks `.native.js` on phones and
-> `.web.js` in the browser. You import it as `./components/StationMap`.
 
 ---
 
-## Setup (one time)
+## Setup
 
-You need **Node.js (LTS)** installed. Then create a fresh Expo project and drop these
-files in. This guarantees you get versions that match your installed Expo Go.
+You need **Node.js (LTS)**. From this folder:
 
 ```bash
-# 1. Create a blank Expo app
-npx create-expo-app@latest citibike --template blank
-cd citibike
-
-# 2. Copy the files from THIS folder over the new project:
-#    - replace App.js
-#    - add the lib/ and components/ folders
-#    (drag-and-drop in Finder, or cp -r the folders in)
-
-# 3. Install native + storage deps (expo install picks matching versions)
-npx expo install react-native-maps expo-location @react-native-async-storage/async-storage
-
-# 4. Install the web map libs (plain npm packages)
-npm install leaflet react-leaflet
+npm install
 ```
+
+Then add your **free** OpenRouteService key (required for the trip planner):
+
+1. Sign up at https://openrouteservice.org → Dashboard → request a token.
+2. Open `lib/config.js` and paste it into `ORS_API_KEY`.
+
+> The "Nearby" tab works without a key. Only "Plan a trip" needs ORS.
 
 ---
 
-## Run on your computer (test functionality)
+## Run on your computer (fast iteration)
 
 ```bash
 npx expo start
 # press  w   to open the web version in your browser
 ```
 
-The web build hot-reloads on save — the fastest way to iterate on logic and layout.
-It'll ask for browser location permission; if you deny, it falls back to Midtown.
+Hot-reloads on save. Trip planning and the map work on web; **voice navigation’s
+background/screen-off behavior is iOS/Android only** (browsers can’t run a background
+location task), though you can still hear instructions with the tab open.
 
-## Run on your phone (real feel + GPS)
+---
 
-1. Install **Expo Go** from the App Store / Play Store.
-2. Run `npx expo start` and scan the QR code (iPhone: Camera app; Android: Expo Go).
-3. Allow location when prompted.
+## Run on your phone
 
-`react-native-maps`, `expo-location`, and AsyncStorage all run inside Expo Go, so no
-build step is needed to test on your phone.
+The Nearby map runs in **Expo Go** (scan the QR from `npx expo start`).
+
+**Voice navigation needs a dev build**, not Expo Go — background location + the
+foreground service aren’t available in Expo Go. Since you have an Apple Developer
+account, build once with EAS and install on your device:
+
+```bash
+npm install -g eas-cli
+eas login
+eas build:configure
+eas build --profile development --platform ios   # also: --platform android
+```
+
+Install the resulting build, then run `npx expo start --dev-client` and open it from
+your phone. This build can stay on your device permanently (no 7-day expiry).
 
 ---
 
 ## Using it
 
-- **Need a bike / Need a dock** toggle re-ranks and recolors every station.
-- **⚡ E-bikes** filter (bike mode only) counts only stations with e-bikes available.
-- Tap the 🏠 / 💼 icons on a list row to save your home and work stations — they show
-  live at the top (bikes at home, docks at work) and persist across launches.
+**Nearby tab**
+- *Need a bike / Need a dock* re-ranks and recolors every station.
+- *⚡ E-bikes* (bike mode) counts only stations with e-bikes available.
+- Tap 🏠 / 💼 on a row to save home/work — live counts show up top, persist across launches.
 - Colors: green = 3+ available, amber = 1–2, grey = none, dark = not renting/returning.
-- Counts already exclude broken bikes; "N down" flags disabled bikes at a station.
+- Counts exclude broken bikes; "N down" flags disabled bikes.
+
+**Plan a trip tab**
+- Enter a destination (leave "From" blank to use your current location).
+- Choose Any / Classic / E-bike — origin stations are filtered to that type.
+- It evaluates the nearest few stations at each end and picks the combination with the
+  lowest **walk + ride + walk** total. It only sends you to a start station with a bike
+  and an end station with an open dock (a 2-dock buffer by default), and shows alternates.
+- Tap **🔊 Start voice navigation** for spoken turn-by-turn. It speaks each maneuver as
+  you approach, says "undock"/"dock" at the transitions, re-routes if you go off course,
+  and announces arrival. Audio routes to AirPods automatically.
+
+Tunables (candidate count, dock buffer, announce distances) live in `lib/config.js`.
 
 ---
 
 ## Notes & limits
 
-- **Data:** Citi Bike GBFS, polled every 45s. Feeds update ~every 30s; the header shows
-  station count and any fetch error (it keeps showing last-good data on a hiccup).
-- **Location on web** requires `https://` or `localhost` — `expo start` serves localhost,
-  so it works in dev.
-- **iOS production build** (standalone, not Expo Go) needs a location-usage string in
-  `app.json` under `ios.infoPlist.NSLocationWhenInUseUsageDescription`, and an Apple
-  Developer account for a permanent install. Not needed for Expo Go testing.
+- **Live ≠ on-arrival.** Availability is current-moment; a single open dock can fill
+  while you ride. The planner prefers a dock buffer and re-checks, but always glance at
+  the alternates. Increase `minDocksAtDest` in `config.js` for more safety margin.
+- **GBFS** polled every 45s; keeps last-good data on a fetch hiccup.
+- **ORS free tier** is ~2,000 requests/day — far more than personal use; each trip plan
+  is 3 matrix calls + a few directions calls.
+- **Web location** needs `localhost`/`https` (Expo serves localhost in dev).
 
-## Next: push alerts (later)
-
-The "alert me when my home station is empty at 8am" feature needs:
-`npx expo install expo-notifications`, a small background check, and an
-[EAS Build](https://docs.expo.dev/build/introduction/) dev build (Expo Go can't do
-background push). The current code keeps home/work saved so this drops in cleanly.
+## Next ideas
+- Re-check dock availability mid-ride and re-pick the end station if it’s filling.
+- Push alerts ("home station empty at 8am") via `expo-notifications` + a scheduled check.
+- Show the planned route as a polyline on the map.

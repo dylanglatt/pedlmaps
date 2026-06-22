@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import StationMap from './components/StationMap';
 import StationList from './components/StationList';
+import TripScreen from './components/TripScreen';
 import { fetchStations, nearest } from './lib/gbfs';
 import { getLocation, DEFAULT_CENTER } from './lib/location';
 import { loadSaved, saveSaved } from './lib/storage';
@@ -19,6 +20,7 @@ const REFRESH_MS = 45000;
 
 export default function App() {
   const [all, setAll] = useState([]);
+  const [tab, setTab] = useState('nearby'); // 'nearby' | 'trip'
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [mode, setMode] = useState('bike'); // 'bike' | 'dock'
   const [ebikeOnly, setEbikeOnly] = useState(false);
@@ -81,12 +83,32 @@ export default function App() {
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
       <View style={styles.header}>
-        <Text style={styles.title}>Citi Bike Nearby</Text>
+        <Text style={styles.title}>{tab === 'nearby' ? 'Citi Bike Nearby' : 'Plan a Trip'}</Text>
         <Text style={styles.sub}>
           {loading ? 'Loading…' : error ? `⚠ ${error}` : `${stations.length} stations`}
         </Text>
       </View>
 
+      {/* Tab switcher */}
+      <View style={styles.tabBar}>
+        {[
+          { k: 'nearby', label: 'Nearby' },
+          { k: 'trip', label: 'Plan a trip' },
+        ].map((t) => (
+          <TouchableOpacity
+            key={t.k}
+            style={[styles.tab, tab === t.k && styles.tabOn]}
+            onPress={() => setTab(t.k)}
+          >
+            <Text style={[styles.tabTxt, tab === t.k && styles.tabTxtOn]}>{t.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {tab === 'trip' ? (
+        <TripScreen stations={all} />
+      ) : (
+      <>
       {/* Saved home/work quick glance */}
       {(home || work) && (
         <View style={styles.savedBar}>
@@ -140,6 +162,8 @@ export default function App() {
           onToggleSave={onToggleSave}
         />
       </View>
+      </>
+      )}
     </SafeAreaView>
   );
 }
@@ -169,6 +193,11 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: 16, paddingTop: 8 },
   title: { fontSize: 20, fontWeight: '800', color: '#111' },
   sub: { fontSize: 12, color: '#777', marginTop: 2 },
+  tabBar: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 8 },
+  tab: { flex: 1, paddingVertical: 9, borderRadius: 10, backgroundColor: '#eee', alignItems: 'center' },
+  tabOn: { backgroundColor: '#111' },
+  tabTxt: { fontSize: 14, fontWeight: '700', color: '#666' },
+  tabTxtOn: { color: '#fff' },
   savedBar: {
     flexDirection: 'row',
     gap: 16,
