@@ -83,10 +83,12 @@ export default function TripScreen({ stations }) {
     buzz(); Keyboard.dismiss();
     setBusy(true); setError(null);
     try {
-      let d = place;
+      let d;
       if (place.placeId) {
         const det = await placeDetails(place.placeId);
-        d = { label: det.label, lat: det.lat, lon: det.lon };
+        d = { name: place.primary || det.name, address: place.secondary || det.address, lat: det.lat, lon: det.lon };
+      } else {
+        d = { name: place.name || place.label, address: place.address || '', lat: place.lat, lon: place.lon };
       }
       setDest(d);
       addRecent(d).then(setRecents);
@@ -175,7 +177,7 @@ export default function TripScreen({ stations }) {
             <>
               {recents.length > 0 && <Text style={styles.section}>Recents</Text>}
               {recents.map((r, i) => (
-                <Row key={i} icon="time-outline" title={r.label} styles={styles} c={c} onPress={() => choose(r)} />
+                <Row key={i} icon="time-outline" title={r.name || r.label} sub={r.address} styles={styles} c={c} onPress={() => choose(r)} />
               ))}
               {recents.length === 0 && (
                 <Text style={styles.hint}>Search a destination — DockHop routes you from your current location.</Text>
@@ -198,7 +200,7 @@ export default function TripScreen({ stations }) {
         <Ionicons name="chevron-back" size={20} color={c.primary} />
         <View style={styles.destText}>
           <Text style={styles.fromLine}>From Current Location</Text>
-          <Text style={styles.destLine} numberOfLines={1}>{dest?.label}</Text>
+          <Text style={styles.destLine} numberOfLines={1}>{dest?.name || dest?.label}</Text>
         </View>
       </TouchableOpacity>
 
@@ -259,7 +261,7 @@ function PlanCard({ plan, title, dim, styles }) {
         <Text style={styles.total}>{fmtMin(plan.totalSec)}</Text>
       </View>
       <Step icon="🚶" time={fmtMin(plan.walkToBikeSec)} title={`Walk to ${o.name}`} sub={`${o.classic} regular · ${o.ebikes} electric`} styles={styles} />
-      <Step icon="🚲" time={fmtMin(plan.rideSec)} title="Ride" styles={styles} />
+      <Step icon="🚲" time={fmtMin(plan.rideSec)} title="Ride" sub={plan.bikeType === 'ebike' ? 'on an e-bike' : 'on a classic bike'} styles={styles} />
       <Step icon="🅿️" time={fmtMin(plan.walkToDestSec)} title={`Dock at ${d.name}`} sub={`${d.docks} open docks`} last styles={styles} />
     </View>
   );
