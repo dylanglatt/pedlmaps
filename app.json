@@ -11,7 +11,7 @@
       "resizeMode": "contain",
       "backgroundColor": "#0B0F18"
     },
-    "runtimeVersion": { "policy": "fingerprint" },
+    "runtimeVersion": "2",
     "updates": { "url": "https://u.expo.dev/8f994d05-f1d5-4f79-b314-7dcb32006f7f" },
     "ios": {
       "supportsTablet": true,
