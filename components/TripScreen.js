@@ -6,10 +6,10 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { directions, WALK, BIKE } from '../lib/routing';
 import { autocomplete, placeDetails } from '../lib/places';
-import { planTrip, fmtMin } from '../lib/tripPlanner';
+import { planTrip, fmtMin, fmtMiles } from '../lib/tripPlanner';
 import { getLocation } from '../lib/location';
-import { loadRecents, addRecent } from '../lib/storage';
-import { nav } from '../lib/voiceNav';
+import { loadRecents, addRecent, removeRecent, clearRecents } from '../lib/storage';
+import { formatClock } from '../lib/geo';
 import RouteMap from './RouteMap';
 import { useTheme, radius, font, shadow } from '../lib/theme';
 
@@ -36,11 +36,11 @@ async function buildRoute(origin, oStation, dStation, dest) {
   return { maneuvers, coords };
 }
 
-export default function TripScreen({ stations }) {
+export default function TripScreen({ stations, onStartNav }) {
   const c = useTheme();
   const styles = useMemo(() => makeStyles(c), [c]);
 
-  const [phase, setPhase] = useState('search'); // 'search' | 'results'
+  const [phase, setPhase] = useState('search');
   const [query, setQuery] = useState('');
   const [sugs, setSugs] = useState([]);
   const [recents, setRecents] = useState([]);
@@ -51,8 +51,6 @@ export default function TripScreen({ stations }) {
   const [route, setRoute] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
-  const [navving, setNavving] = useState(false);
-  const [instr, setInstr] = useState('');
   const timer = useRef(null);
 
   useEffect(() => { loadRecents().then(setRecents); }, []);
@@ -109,44 +107,31 @@ export default function TripScreen({ stations }) {
     setPhase('search'); setPlan(null); setRoute(null); setSugs([]); setError(null);
   }, []);
 
-  const startNav = useCallback(async () => {
+  const go = useCallback(async () => {
     if (!plan || !origin || !dest) return;
     buzz(Haptics?.ImpactFeedbackStyle?.Medium);
-    setBusy(true); setError(null);
-    try {
-      const { best } = plan;
-      const r = route || (await buildRoute(origin, best.originStation, best.destStation, dest));
-      setNavving(true);
-      await nav.start({
-        maneuvers: r.maneuvers,
-        routeCoords: r.coords,
-        onProgress: ({ maneuver }) => setInstr(maneuver.instruction),
-        onArrive: () => { setNavving(false); setInstr('Arrived.'); },
-        onReroute: async (here) => {
-          try {
-            const bike = await directions(BIKE, [lonlat(here), lonlat(best.destStation)]);
-            const walk = await directions(WALK, [lonlat(best.destStation), lonlat(dest)]);
-            nav.maneuvers = [...bike.maneuvers, ...walk.maneuvers];
-            nav.routeCoords = [...bike.coords, ...walk.coords];
-            nav.idx = 0; nav.preAnnounced = false;
-          } catch {}
-        },
-      });
-    } catch (e) { setError(e.message || 'Could not start navigation'); setNavving(false); }
-    finally { setBusy(false); }
-  }, [plan, origin, dest, route]);
+    let r = route;
+    if (!r) {
+      setBusy(true);
+      try { r = await buildRoute(origin, plan.best.originStation, plan.best.destStation, dest); }
+      catch (e) { setError(e.message || 'Could not start'); setBusy(false); return; }
+      setBusy(false);
+    }
+    onStartNav && onStartNav({ plan: plan.best, route: r, dest });
+  }, [plan, origin, dest, route, onStartNav]);
 
-  const stopNav = useCallback(() => { nav.stop(); setNavving(false); setInstr(''); }, []);
+  const onRemoveRecent = useCallback(async (r) => { setRecents(await removeRecent(r)); }, []);
+  const onClearRecents = useCallback(async () => { setRecents(await clearRecents()); }, []);
 
   const markers = plan
     ? [
-        { lat: plan.best.originStation.lat, lon: plan.best.originStation.lon, title: `Pick up: ${plan.best.originStation.name}`, color: c.good },
-        { lat: plan.best.destStation.lat, lon: plan.best.destStation.lon, title: `Dock: ${plan.best.destStation.name}`, color: c.danger },
+        { lat: plan.best.originStation.lat, lon: plan.best.originStation.lon, title: 'Pick up', color: c.good },
+        { lat: plan.best.destStation.lat, lon: plan.best.destStation.lon, title: 'Dock', color: c.danger },
         ...(dest ? [{ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.primary }] : []),
       ]
     : [];
 
-  // ---- SEARCH PHASE ----
+  // ---- SEARCH ----
   if (phase === 'search') {
     const showRecents = query.trim().length < 3;
     return (
@@ -175,9 +160,15 @@ export default function TripScreen({ stations }) {
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
           {showRecents ? (
             <>
-              {recents.length > 0 && <Text style={styles.section}>Recents</Text>}
+              {recents.length > 0 && (
+                <View style={styles.sectionRow}>
+                  <Text style={styles.section}>Recents</Text>
+                  <TouchableOpacity onPress={onClearRecents} hitSlop={8}><Text style={styles.clear}>Clear</Text></TouchableOpacity>
+                </View>
+              )}
               {recents.map((r, i) => (
-                <Row key={i} icon="time-outline" title={r.name || r.label} sub={r.address} styles={styles} c={c} onPress={() => choose(r)} />
+                <Row key={i} icon="time-outline" title={r.name || r.label} sub={r.address} styles={styles} c={c}
+                  onPress={() => choose(r)} onRemove={() => onRemoveRecent(r)} />
               ))}
               {recents.length === 0 && (
                 <Text style={styles.hint}>Search a destination — DockHop routes you from your current location.</Text>
@@ -193,7 +184,8 @@ export default function TripScreen({ stations }) {
     );
   }
 
-  // ---- RESULTS PHASE ----
+  // ---- RESULTS (Apple-style preview) ----
+  const arrival = plan ? new Date(Date.now() + plan.best.totalSec * 1000) : null;
   return (
     <ScrollView style={styles.flex} contentContainerStyle={{ paddingBottom: 28 }} keyboardShouldPersistTaps="handled">
       <TouchableOpacity style={styles.destRow} onPress={backToSearch} activeOpacity={0.7}>
@@ -219,50 +211,51 @@ export default function TripScreen({ stations }) {
 
       {plan && (
         <>
-          <PlanCard plan={plan.best} title="Best route" styles={styles} />
-          {plan.alternates.map((p, i) => <PlanCard key={i} plan={p} title={`Alternate ${i + 1}`} dim styles={styles} />)}
-          {!navving ? (
-            <TouchableOpacity style={[styles.cta, styles.go]} onPress={startNav} activeOpacity={0.9}>
-              <Text style={styles.ctaTxt}>🔊  Start voice navigation</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.navBox}>
-              <Text style={styles.navInstr}>{instr || 'Navigating…'}</Text>
-              <TouchableOpacity style={[styles.cta, styles.stop]} onPress={stopNav} activeOpacity={0.9}>
-                <Text style={styles.ctaTxt}>End navigation</Text>
+          {/* Apple-style primary route card with GO */}
+          <View style={styles.bestCard}>
+            <View style={styles.bestTop}>
+              <View style={styles.flex}>
+                <Text style={styles.bestMin}>{fmtMin(plan.best.totalSec)}</Text>
+                <Text style={styles.bestSub}>{formatClock(arrival)} arrival · {fmtMiles(plan.best.distanceM || 0)}</Text>
+                <Text style={styles.bestType}>on {plan.best.bikeType === 'ebike' ? 'an e-bike' : 'a classic bike'}</Text>
+              </View>
+              <TouchableOpacity style={styles.goBtn} onPress={go} activeOpacity={0.9}>
+                <Text style={styles.goTxt}>GO</Text>
               </TouchableOpacity>
             </View>
-          )}
+            <View style={styles.divider} />
+            <Step icon="🚶" time={fmtMin(plan.best.walkToBikeSec)} title={`Walk to ${plan.best.originStation.name}`} sub={`${plan.best.originStation.classic} regular · ${plan.best.originStation.ebikes} electric`} styles={styles} />
+            <Step icon="🚲" time={fmtMin(plan.best.rideSec)} title="Ride" sub={plan.best.bikeType === 'ebike' ? 'on an e-bike' : 'on a classic bike'} styles={styles} />
+            <Step icon="🅿️" time={fmtMin(plan.best.walkToDestSec)} title={`Dock at ${plan.best.destStation.name}`} sub={`${plan.best.destStation.docks} open docks`} last styles={styles} />
+          </View>
+
+          {plan.alternates.map((p, i) => (
+            <View key={i} style={styles.altCard}>
+              <Text style={styles.altMin}>{fmtMin(p.totalSec)}</Text>
+              <Text style={styles.altTxt} numberOfLines={1}>via {p.originStation.name} → {p.destStation.name}</Text>
+            </View>
+          ))}
         </>
       )}
     </ScrollView>
   );
 }
 
-function Row({ icon, title, sub, onPress, styles, c }) {
+function Row({ icon, title, sub, onPress, onRemove, styles, c }) {
   return (
-    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.7}>
-      <View style={styles.rowIcon}><Ionicons name={icon} size={18} color={c.textMute} /></View>
-      <View style={styles.flex}>
-        <Text style={styles.rowTitle} numberOfLines={1}>{title}</Text>
-        {!!sub && <Text style={styles.rowSub} numberOfLines={1}>{sub}</Text>}
-      </View>
-    </TouchableOpacity>
-  );
-}
-
-function PlanCard({ plan, title, dim, styles }) {
-  const o = plan.originStation;
-  const d = plan.destStation;
-  return (
-    <View style={[styles.card, dim && styles.cardDim]}>
-      <View style={styles.cardHead}>
-        <Text style={styles.cardTitle}>{title}</Text>
-        <Text style={styles.total}>{fmtMin(plan.totalSec)}</Text>
-      </View>
-      <Step icon="🚶" time={fmtMin(plan.walkToBikeSec)} title={`Walk to ${o.name}`} sub={`${o.classic} regular · ${o.ebikes} electric`} styles={styles} />
-      <Step icon="🚲" time={fmtMin(plan.rideSec)} title="Ride" sub={plan.bikeType === 'ebike' ? 'on an e-bike' : 'on a classic bike'} styles={styles} />
-      <Step icon="🅿️" time={fmtMin(plan.walkToDestSec)} title={`Dock at ${d.name}`} sub={`${d.docks} open docks`} last styles={styles} />
+    <View style={styles.row}>
+      <TouchableOpacity style={styles.rowMain} onPress={onPress} activeOpacity={0.7}>
+        <View style={styles.rowIcon}><Ionicons name={icon} size={18} color={c.textMute} /></View>
+        <View style={styles.flex}>
+          <Text style={styles.rowTitle} numberOfLines={1}>{title}</Text>
+          {!!sub && <Text style={styles.rowSub} numberOfLines={1}>{sub}</Text>}
+        </View>
+      </TouchableOpacity>
+      {onRemove && (
+        <TouchableOpacity onPress={onRemove} hitSlop={8} style={styles.rowRemove}>
+          <Ionicons name="close" size={16} color={c.textFaint} />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -290,9 +283,14 @@ function makeStyles(c) {
     flex: { flex: 1 },
     searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surface, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 11 : 6, marginHorizontal: 16, marginBottom: 8 },
     searchInput: { flex: 1, fontSize: 16, color: c.text, fontFamily: font.regular },
-    section: { fontSize: 12, fontFamily: font.bold, color: c.textMute, textTransform: 'uppercase', letterSpacing: 0.5, paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
+    sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
+    section: { fontSize: 12, fontFamily: font.bold, color: c.textMute, textTransform: 'uppercase', letterSpacing: 0.5 },
+    clear: { fontSize: 13, fontFamily: font.semibold, color: c.primary },
     hint: { fontSize: 13, color: c.textMute, fontFamily: font.regular, paddingHorizontal: 16, paddingTop: 12, lineHeight: 19 },
-    row: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 16 },
+
+    row: { flexDirection: 'row', alignItems: 'center' },
+    rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingLeft: 16 },
+    rowRemove: { padding: 14 },
     rowIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface },
     rowTitle: { fontSize: 15, fontFamily: font.semibold, color: c.text },
     rowSub: { fontSize: 12, color: c.textMute, fontFamily: font.regular, marginTop: 1 },
@@ -307,18 +305,21 @@ function makeStyles(c) {
     prefOn: { backgroundColor: c.elevated, ...shadow(c).card },
     prefTxt: { fontSize: 13, fontFamily: font.semibold, color: c.textMute },
     prefTxtOn: { color: c.text },
-
-    cta: { backgroundColor: c.primary, borderRadius: radius.md, paddingVertical: 15, alignItems: 'center', marginTop: 16, marginHorizontal: 16, ...shadow(c).card },
-    go: { backgroundColor: c.good },
-    stop: { backgroundColor: c.danger, marginTop: 10 },
-    ctaTxt: { color: c.onPrimary, fontSize: 16, fontFamily: font.bold },
     err: { color: c.danger, marginTop: 10, marginHorizontal: 16, fontSize: 13, fontFamily: font.semibold },
 
-    card: { borderWidth: 1, borderColor: c.border, borderRadius: radius.lg, padding: 16, marginTop: 12, marginHorizontal: 16, backgroundColor: c.elevated, ...shadow(c).card },
-    cardDim: { opacity: 0.6 },
-    cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
-    cardTitle: { fontSize: 12, fontFamily: font.bold, color: c.textMute, textTransform: 'uppercase', letterSpacing: 0.5 },
-    total: { fontSize: 19, fontFamily: font.display, color: c.primary },
+    bestCard: { borderRadius: radius.lg, padding: 16, marginTop: 14, marginHorizontal: 16, backgroundColor: c.elevated, borderWidth: 1, borderColor: c.border, ...shadow(c).card },
+    bestTop: { flexDirection: 'row', alignItems: 'center' },
+    bestMin: { fontSize: 28, fontFamily: font.display, color: c.text },
+    bestSub: { fontSize: 13, color: c.textMute, fontFamily: font.medium, marginTop: 2 },
+    bestType: { fontSize: 12, color: c.textFaint, fontFamily: font.regular, marginTop: 1 },
+    goBtn: { backgroundColor: c.good, width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', ...shadow(c).card },
+    goTxt: { color: '#fff', fontSize: 18, fontFamily: font.bold },
+    divider: { height: 1, backgroundColor: c.hairline, marginVertical: 12 },
+
+    altCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: radius.md, padding: 14, marginTop: 10, marginHorizontal: 16, backgroundColor: c.surface },
+    altMin: { fontSize: 17, fontFamily: font.bold, color: c.text },
+    altTxt: { flex: 1, fontSize: 13, color: c.textMute, fontFamily: font.regular },
+
     step: { flexDirection: 'row' },
     stepRail: { width: 28, alignItems: 'center' },
     stepIcon: { fontSize: 16 },
@@ -328,7 +329,5 @@ function makeStyles(c) {
     stepTitle: { fontSize: 15, fontFamily: font.semibold, color: c.text, flex: 1, paddingRight: 8 },
     stepTime: { fontSize: 13, fontFamily: font.semibold, color: c.textMute },
     stepSub: { fontSize: 12, color: c.textMute, marginTop: 1, fontFamily: font.regular },
-    navBox: { marginTop: 16, marginHorizontal: 16, padding: 18, backgroundColor: c.goodBg, borderRadius: radius.lg },
-    navInstr: { fontSize: 20, fontFamily: font.bold, color: c.good, textAlign: 'center' },
   });
 }

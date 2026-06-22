@@ -11,6 +11,7 @@ import StationMap from './components/StationMap';
 import StationList from './components/StationList';
 import TripScreen from './components/TripScreen';
 import BottomSheet from './components/BottomSheet';
+import NavScreen from './components/NavScreen';
 import Logo from './components/Logo';
 import { fetchStations, nearest } from './lib/gbfs';
 import { getLocation, DEFAULT_CENTER } from './lib/location';
@@ -37,6 +38,7 @@ export default function App() {
   const [updatedAt, setUpdatedAt] = useState(null);
   const [sheetIndex, setSheetIndex] = useState(1);
   const [searching, setSearching] = useState(false);
+  const [navTrip, setNavTrip] = useState(null);
   const timer = useRef(null);
 
   const refresh = useCallback(async () => {
@@ -137,7 +139,7 @@ export default function App() {
 
       <BottomSheet index={sheetIndex} onIndexChange={setSheetIndex} renderHeader={Header}>
         {searching ? (
-          <TripScreen stations={all} />
+          <TripScreen stations={all} onStartNav={setNavTrip} />
         ) : !loading && stations.length === 0 ? (
           <View style={styles.center}>
             <Text style={styles.emptyTitle}>No stations nearby</Text>
@@ -153,6 +155,8 @@ export default function App() {
           />
         )}
       </BottomSheet>
+
+      {navTrip && <NavScreen trip={navTrip} onEnd={() => setNavTrip(null)} />}
     </View>
   );
 }

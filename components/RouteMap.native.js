@@ -1,21 +1,33 @@
-import React from 'react';
+import React, { useRef, useEffect } from 'react';
 import { StyleSheet } from 'react-native';
 import MapView, { Polyline, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 
-// Shows the planned route polyline + station/destination markers (iOS/Android).
-export default function RouteMap({ coords, markers }) {
+// Route polyline + markers. `fill` makes it full-bleed; `follow` recenters on a
+// moving point (for active navigation); `showUser` shows the location puck.
+export default function RouteMap({ coords, markers, fill, follow, showUser }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (follow && ref.current) {
+      ref.current.animateToRegion(
+        { latitude: follow.lat, longitude: follow.lon, latitudeDelta: 0.006, longitudeDelta: 0.006 },
+        700
+      );
+    }
+  }, [follow?.lat, follow?.lon]);
+
   if (!coords || !coords.length) return null;
   const pts = coords.map(([lat, lon]) => ({ latitude: lat, longitude: lon }));
   return (
-    <MapView provider={PROVIDER_DEFAULT} style={styles.map} initialRegion={region(coords)}>
-      <Polyline coordinates={pts} strokeColor="#1a73e8" strokeWidth={4} />
-      {markers.map((m, i) => (
-        <Marker
-          key={i}
-          coordinate={{ latitude: m.lat, longitude: m.lon }}
-          title={m.title}
-          pinColor={m.color}
-        />
+    <MapView
+      ref={ref}
+      provider={PROVIDER_DEFAULT}
+      style={fill ? StyleSheet.absoluteFill : styles.map}
+      showsUserLocation={!!showUser}
+      initialRegion={region(coords)}
+    >
+      <Polyline coordinates={pts} strokeColor="#5B53E6" strokeWidth={6} />
+      {(markers || []).map((m, i) => (
+        <Marker key={i} coordinate={{ latitude: m.lat, longitude: m.lon }} title={m.title} pinColor={m.color} />
       ))}
     </MapView>
   );
@@ -34,6 +46,4 @@ function region(coords) {
   };
 }
 
-const styles = StyleSheet.create({
-  map: { width: '100%', height: 220, borderRadius: 12 },
-});
+const styles = StyleSheet.create({ map: { width: '100%', height: 220, borderRadius: 12 } });
