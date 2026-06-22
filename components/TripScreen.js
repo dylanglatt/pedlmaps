@@ -209,7 +209,7 @@ function Step({ icon, time, title, sub, last, styles }) {
 
 function makeStyles(c) {
   return StyleSheet.create({
-    wrap: { flex: 1, backgroundColor: c.bg },
+    wrap: { flex: 1, backgroundColor: 'transparent' },
     label: { fontSize: 12, color: c.textMute, marginBottom: 5, marginTop: 12, fontFamily: font.bold, textTransform: 'uppercase', letterSpacing: 0.5 },
     input: { borderWidth: 1, borderColor: c.border, borderRadius: radius.md, padding: 13, fontSize: 15, color: c.text, backgroundColor: c.elevated, fontFamily: font.regular },
     prefRow: { flexDirection: 'row', gap: 6, marginTop: 14, backgroundColor: c.surfaceAlt, borderRadius: radius.md, padding: 3 },

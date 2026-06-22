@@ -20,6 +20,7 @@
     "react-leaflet": "^5.0.0",
     "react-native": "0.85.3",
     "react-native-maps": "1.27.2",
+    "react-native-svg": "15.15.4",
     "react-native-web": "^0.21.2"
   },
   "scripts": {

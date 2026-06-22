@@ -1,26 +1,22 @@
-import React, { useRef, useState, useMemo } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
 import { View, Animated, PanResponder, StyleSheet, useWindowDimensions } from 'react-native';
 import { useTheme, radius, shadow } from '../lib/theme';
 
-// Lightweight draggable sheet (no extra deps). Snap points are *visible heights*.
-export default function BottomSheet({ renderHeader, children }) {
+// Controlled draggable sheet. `index` selects a snap point (0 peek, 1 mid, 2 full);
+// dragging reports the new nearest snap via onIndexChange.
+export default function BottomSheet({ index = 1, onIndexChange, renderHeader, children }) {
   const c = useTheme();
   const { height } = useWindowDimensions();
   const MAX = Math.round(height * 0.9);
-  const snaps = useMemo(
-    () => [Math.round(height * 0.18), Math.round(height * 0.52), MAX],
-    [height, MAX]
-  );
+  const snaps = useMemo(() => [Math.round(height * 0.16), Math.round(height * 0.52), MAX], [height, MAX]);
   const toY = (visible) => MAX - visible;
 
   const translateY = useRef(new Animated.Value(toY(snaps[1]))).current;
-  const start = useRef(toY(snaps[1]));
-  const idx = useRef(1);
+  const start = useRef(toY(snaps[index] ?? snaps[1]));
 
-  const snapTo = (i) => {
-    idx.current = i;
-    Animated.spring(translateY, { toValue: toY(snaps[i]), useNativeDriver: true, bounciness: 3, speed: 14 }).start();
-  };
+  useEffect(() => {
+    Animated.spring(translateY, { toValue: toY(snaps[index] ?? snaps[1]), useNativeDriver: true, bounciness: 2, speed: 14 }).start();
+  }, [index, snaps]); // eslint-disable-line
 
   const pan = useRef(
     PanResponder.create({
@@ -32,14 +28,12 @@ export default function BottomSheet({ renderHeader, children }) {
         translateY.setValue(v);
       },
       onPanResponderRelease: (_, g) => {
-        if (Math.abs(g.dy) < 6) {
-          snapTo((idx.current + 1) % snaps.length); // tap handle to cycle
-          return;
-        }
         const cur = start.current + g.dy;
         let best = 0, bd = Infinity;
         snaps.forEach((s, i) => { const d = Math.abs(toY(s) - cur); if (d < bd) { bd = d; best = i; } });
-        snapTo(best);
+        if (Math.abs(g.dy) < 6) best = (index + 1) % snaps.length; // tap handle to cycle
+        Animated.spring(translateY, { toValue: toY(snaps[best]), useNativeDriver: true, bounciness: 2, speed: 14 }).start();
+        onIndexChange && onIndexChange(best);
       },
     })
   ).current;
@@ -60,17 +54,13 @@ export default function BottomSheet({ renderHeader, children }) {
 function makeStyles(c, MAX) {
   return StyleSheet.create({
     sheet: {
-      position: 'absolute',
-      left: 0, right: 0, bottom: 0,
-      height: MAX,
-      zIndex: 1000,
+      position: 'absolute', left: 0, right: 0, bottom: 0, height: MAX, zIndex: 1000,
       backgroundColor: c.elevated,
-      borderTopLeftRadius: radius.xl,
-      borderTopRightRadius: radius.xl,
+      borderTopLeftRadius: radius.xl, borderTopRightRadius: radius.xl,
       ...shadow(c).pop,
     },
-    grip: { paddingTop: 8, paddingBottom: 6, paddingHorizontal: 16 },
-    handle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: c.border, marginBottom: 8 },
+    grip: { paddingTop: 8, paddingHorizontal: 16 },
+    handle: { alignSelf: 'center', width: 40, height: 5, borderRadius: 3, backgroundColor: c.border, marginBottom: 10 },
     content: { flex: 1 },
   });
 }

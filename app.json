@@ -1,18 +1,25 @@
 {
   "expo": {
-    "name": "Citi Bike Nav",
+    "name": "DockHop",
     "slug": "citibike",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Shows nearby stations and guides you while riding.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Keeps voice navigation running with the screen off.",
-        "UIBackgroundModes": ["location", "audio"]
-      }
+        "UIBackgroundModes": [
+          "location",
+          "audio",
+          "location",
+          "audio"
+        ],
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "bundleIdentifier": "com.dylanglatt.citibike"
     },
     "android": {
       "adaptiveIcon": {
@@ -26,7 +33,12 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_BACKGROUND_LOCATION",
         "FOREGROUND_SERVICE",
-        "FOREGROUND_SERVICE_LOCATION"
+        "FOREGROUND_SERVICE_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.ACCESS_BACKGROUND_LOCATION",
+        "android.permission.FOREGROUND_SERVICE",
+        "android.permission.FOREGROUND_SERVICE_LOCATION"
       ]
     },
     "web": {
@@ -41,6 +53,11 @@
           "isAndroidForegroundServiceEnabled": true
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "8f994d05-f1d5-4f79-b314-7dcb32006f7f"
+      }
+    }
   }
 }
