@@ -55,7 +55,8 @@ export default function NavScreen({ trip, onEnd }) {
 
   const pan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dy) > 4,
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: () => true,
       onPanResponderRelease: (_, g) => {
         if (g.dy < -12) toggle(true);
         else if (g.dy > 12) toggle(false);
@@ -88,6 +89,18 @@ export default function NavScreen({ trip, onEnd }) {
               <Ionicons name={arrowFor(next.instruction)} size={16} color="rgba(255,255,255,0.7)" />
               <Text style={styles.bannerNextTxt} numberOfLines={1}>Then {next.instruction}</Text>
             </View>
+          )}
+        </View>
+
+        {/* Floating map buttons (Apple-style) */}
+        <View style={styles.fab}>
+          <TouchableOpacity style={styles.fabBtn} onPress={() => setVoice(!voiceOn)} activeOpacity={0.85}>
+            <Ionicons name={voiceOn ? 'volume-high' : 'volume-mute'} size={22} color={voiceOn ? c.primary : c.textMute} />
+          </TouchableOpacity>
+          {here && (
+            <TouchableOpacity style={styles.fabBtn} onPress={() => setHere({ ...here })} activeOpacity={0.85}>
+              <Ionicons name="navigate" size={20} color={c.primary} />
+            </TouchableOpacity>
           )}
         </View>
 
@@ -144,6 +157,9 @@ function makeStyles(c) {
     bannerTxt: { flex: 1, color: '#fff', fontSize: 20, fontFamily: font.bold },
     bannerNext: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
     bannerNextTxt: { color: 'rgba(255,255,255,0.75)', fontSize: 14, fontFamily: font.medium, flex: 1 },
+
+    fab: { position: 'absolute', right: 12, top: Platform.OS === 'ios' ? 170 : 130, gap: 10 },
+    fabBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.elevated, alignItems: 'center', justifyContent: 'center', ...shadow(c).card },
 
     bottom: {
       position: 'absolute', bottom: 0, left: 0, right: 0,
