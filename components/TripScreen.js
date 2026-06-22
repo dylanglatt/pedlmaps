@@ -6,6 +6,8 @@ import { geocode, directions, WALK, BIKE } from '../lib/routing';
 import { planTrip, fmtMin } from '../lib/tripPlanner';
 import { getLocation } from '../lib/location';
 import { nav } from '../lib/voiceNav';
+import AutocompleteInput from './AutocompleteInput';
+import RouteMap from './RouteMap';
 
 const lonlat = (p) => [p.lon, p.lat];
 
@@ -19,8 +21,8 @@ async function buildRoute(origin, oStation, dStation, dest) {
   const maneuvers = [];
   const coords = [];
   legs.forEach((leg, i) => {
-    if (i === 1) maneuvers.push({ instruction: `Undock your bike and start riding.`, location: leg.maneuvers[0]?.location || coords[coords.length - 1], distance: 0 });
-    if (i === 2) maneuvers.push({ instruction: `Dock your bike, then walk to your destination.`, location: leg.maneuvers[0]?.location || coords[coords.length - 1], distance: 0 });
+    if (i === 1) maneuvers.push({ instruction: 'Undock your bike and start riding.', location: leg.maneuvers[0]?.location || coords[coords.length - 1], distance: 0 });
+    if (i === 2) maneuvers.push({ instruction: 'Dock your bike, then walk to your destination.', location: leg.maneuvers[0]?.location || coords[coords.length - 1], distance: 0 });
     maneuvers.push(...leg.maneuvers);
     coords.push(...leg.coords);
   });
@@ -30,32 +32,37 @@ async function buildRoute(origin, oStation, dStation, dest) {
 export default function TripScreen({ stations }) {
   const [originText, setOriginText] = useState('');
   const [destText, setDestText] = useState('');
+  const [destPlace, setDestPlace] = useState(null); // resolved {lat,lon,label} from autocomplete
   const [prefer, setPrefer] = useState('any');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const [plan, setPlan] = useState(null);
-  const [ctx, setCtx] = useState(null); // {origin, dest} resolved points
+  const [ctx, setCtx] = useState(null);   // {origin, dest}
+  const [route, setRoute] = useState(null); // {coords, maneuvers}
   const [navving, setNavving] = useState(false);
   const [instr, setInstr] = useState('');
 
   const handlePlan = useCallback(async () => {
-    setBusy(true); setError(null); setPlan(null);
+    setBusy(true); setError(null); setPlan(null); setRoute(null);
     try {
-      const origin = originText.trim()
-        ? await geocode(originText.trim())
-        : await getLocation();
+      const origin = originText.trim() ? await geocode(originText.trim()) : await getLocation();
       if (!origin) throw new Error('Could not find your starting point.');
-      const dest = await geocode(destText.trim());
+      const dest = destPlace || (destText.trim() ? await geocode(destText.trim()) : null);
       if (!dest) throw new Error('Could not find that destination.');
       const result = await planTrip({ origin, dest, stations, prefer });
       setCtx({ origin, dest });
       setPlan(result);
+      // Fetch route geometry for the best plan (best-effort; won't block the plan).
+      try {
+        const r = await buildRoute(origin, result.best.originStation, result.best.destStation, dest);
+        setRoute(r);
+      } catch { setRoute(null); }
     } catch (e) {
       setError(e.message || 'Planning failed');
     } finally {
       setBusy(false);
     }
-  }, [originText, destText, prefer, stations]);
+  }, [originText, destText, destPlace, prefer, stations]);
 
   const startNav = useCallback(async () => {
     if (!plan || !ctx) return;
@@ -63,11 +70,11 @@ export default function TripScreen({ stations }) {
     try {
       const { origin, dest } = ctx;
       const { best } = plan;
-      const route = await buildRoute(origin, best.originStation, best.destStation, dest);
+      const r = route || (await buildRoute(origin, best.originStation, best.destStation, dest));
       setNavving(true);
       await nav.start({
-        maneuvers: route.maneuvers,
-        routeCoords: route.coords,
+        maneuvers: r.maneuvers,
+        routeCoords: r.coords,
         onProgress: ({ maneuver }) => setInstr(maneuver.instruction),
         onArrive: () => { setNavving(false); setInstr('Arrived.'); },
         onReroute: async (here) => {
@@ -86,25 +93,34 @@ export default function TripScreen({ stations }) {
     } finally {
       setBusy(false);
     }
-  }, [plan, ctx]);
+  }, [plan, ctx, route]);
 
   const stopNav = useCallback(() => { nav.stop(); setNavving(false); setInstr(''); }, []);
 
+  const markers = plan
+    ? [
+        { lat: plan.best.originStation.lat, lon: plan.best.originStation.lon, title: `Pick up: ${plan.best.originStation.name}`, color: 'green' },
+        { lat: plan.best.destStation.lat, lon: plan.best.destStation.lon, title: `Dock: ${plan.best.destStation.name}`, color: 'red' },
+        ...(ctx?.dest ? [{ lat: ctx.dest.lat, lon: ctx.dest.lon, title: 'Destination', color: 'blue' }] : []),
+      ]
+    : [];
+
   return (
-    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }}>
+    <ScrollView style={styles.wrap} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
       <Text style={styles.label}>From</Text>
       <TextInput
         style={styles.input}
         placeholder="Your address (blank = current location)"
         value={originText}
         onChangeText={setOriginText}
+        autoCorrect={false}
       />
       <Text style={styles.label}>To</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="e.g. Grand Central Terminal"
+      <AutocompleteInput
         value={destText}
         onChangeText={setDestText}
+        onSelectPlace={setDestPlace}
+        placeholder="e.g. Grand Central Terminal"
       />
 
       <View style={styles.prefRow}>
@@ -129,6 +145,12 @@ export default function TripScreen({ stations }) {
 
       {error && <Text style={styles.err}>⚠ {error}</Text>}
       {busy && <ActivityIndicator style={{ marginTop: 16 }} />}
+
+      {route && (
+        <View style={{ marginTop: 16 }}>
+          <RouteMap coords={route.coords} markers={markers} />
+        </View>
+      )}
 
       {plan && (
         <View style={styles.plan}>
@@ -165,7 +187,7 @@ function PlanCard({ plan, title, dim }) {
         <Text style={styles.total}>{fmtMin(plan.totalSec)} total</Text>
       </View>
       <Text style={styles.leg}>🚶 {fmtMin(plan.walkToBikeSec)} to <Text style={styles.b}>{o.name}</Text></Text>
-      <Text style={styles.sub}>   {o.bikes} bikes · {o.ebikes} e-bike{o.ebikes === 1 ? '' : 's'} · {o.classic} classic</Text>
+      <Text style={styles.sub}>   {o.classic} regular · {o.ebikes} electric</Text>
       <Text style={styles.leg}>🚲 {fmtMin(plan.rideSec)} ride</Text>
       <Text style={styles.leg}>🚶 {fmtMin(plan.walkToDestSec)} from <Text style={styles.b}>{d.name}</Text></Text>
       <Text style={styles.sub}>   {d.docks} open docks</Text>

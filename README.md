@@ -45,12 +45,21 @@ You need **Node.js (LTS)**. From this folder:
 npm install
 ```
 
-Then add your **free** OpenRouteService key (required for the trip planner):
+Then add a routing key. The app supports two providers, set via `PROVIDER` in `lib/config.js`:
 
+**Google (`PROVIDER = 'google'`)** — best bike routes; needs billing.
+1. Google Cloud console → create a project → enable billing.
+2. Enable **Directions API**, **Distance Matrix API**, **Geocoding API**.
+3. Create an API key, restrict it to those 3 APIs, set a billing budget cap.
+4. Paste it into `GOOGLE_API_KEY`.
+   - ⚠️ Google's routing APIs block browser (CORS) calls, so trip planning only
+     works in the **native app**, not the web preview. Use `'ors'` for laptop testing.
+
+**OpenRouteService (`PROVIDER = 'ors'`)** — free, no card, works on web + native.
 1. Sign up at https://openrouteservice.org → Dashboard → request a token.
-2. Open `lib/config.js` and paste it into `ORS_API_KEY`.
+2. Paste it into `ORS_API_KEY`.
 
-> The "Nearby" tab works without a key. Only "Plan a trip" needs ORS.
+> The "Nearby" tab needs no key. Only "Plan a trip" uses the routing provider.
 
 ---
 
