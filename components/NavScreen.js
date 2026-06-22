@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, Platform, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import RouteMap from './RouteMap';
 import { nav } from '../lib/voiceNav';
@@ -51,6 +51,7 @@ export default function NavScreen({ trip, onEnd }) {
   ];
 
   return (
+    <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={() => { nav.stop(); onEnd && onEnd(); }}>
     <View style={styles.root}>
       <RouteMap coords={route.coords} markers={markers} fill follow={here} showUser />
 
@@ -80,6 +81,7 @@ export default function NavScreen({ trip, onEnd }) {
         </TouchableOpacity>
       </View>
     </View>
+    </Modal>
   );
 }
 
@@ -94,7 +96,7 @@ function Stat({ big, label, styles }) {
 
 function makeStyles(c) {
   return StyleSheet.create({
-    root: { ...StyleSheet.absoluteFillObject, backgroundColor: c.bg, zIndex: 2000 },
+    root: { flex: 1, backgroundColor: c.bg },
     banner: {
       position: 'absolute', top: Platform.OS === 'ios' ? 56 : 20, left: 12, right: 12,
       backgroundColor: '#1B2230', borderRadius: radius.lg, padding: 14, ...shadow(c).pop,
