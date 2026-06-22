@@ -18,6 +18,7 @@ try { Haptics = require('expo-haptics'); } catch {}
 const buzz = (s) => { if (Haptics && Platform.OS !== 'web') Haptics.impactAsync(s || Haptics.ImpactFeedbackStyle.Light); };
 
 const lonlat = (p) => [p.lon, p.lat];
+const CURRENT = () => ({ name: 'My Location', current: true });
 
 async function buildRoute(origin, oStation, dStation, dest) {
   const legs = await Promise.all([
@@ -41,19 +42,24 @@ export default function TripScreen({ stations, onStartNav }) {
   const styles = useMemo(() => makeStyles(c), [c]);
 
   const [phase, setPhase] = useState('search');
+  const [editing, setEditing] = useState('to'); // which endpoint the search sets
   const [query, setQuery] = useState('');
   const [sugs, setSugs] = useState([]);
   const [recents, setRecents] = useState([]);
-  const [origin, setOrigin] = useState(null);
+  const [origin, setOrigin] = useState(null);   // resolved {name,lat,lon,current?}
   const [dest, setDest] = useState(null);
   const [prefer, setPrefer] = useState('any');
-  const [plan, setPlan] = useState(null);
+  const [plan, setPlan] = useState(null);        // { best, alternates }
+  const [selIdx, setSelIdx] = useState(0);
   const [route, setRoute] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   const timer = useRef(null);
 
-  useEffect(() => { loadRecents().then(setRecents); }, []);
+  useEffect(() => {
+    loadRecents().then(setRecents);
+    getLocation().then((loc) => setOrigin({ ...CURRENT(), lat: loc.lat, lon: loc.lon })).catch(() => {});
+  }, []);
 
   const onType = useCallback((t) => {
     setQuery(t);
@@ -64,8 +70,11 @@ export default function TripScreen({ stations, onStartNav }) {
     }, 300);
   }, []);
 
+  const allPlans = plan ? [plan.best, ...plan.alternates] : [];
+  const current = allPlans[selIdx] || null;
+
   const runPlan = useCallback(async (org, d, pref) => {
-    setBusy(true); setError(null); setPlan(null); setRoute(null);
+    setBusy(true); setError(null); setPlan(null); setRoute(null); setSelIdx(0);
     try {
       const result = await planTrip({ origin: org, dest: d, stations, prefer: pref });
       setPlan(result);
@@ -77,56 +86,77 @@ export default function TripScreen({ stations, onStartNav }) {
     finally { setBusy(false); }
   }, [stations]);
 
+  const resolvePlace = async (place) => {
+    if (place.current) { const loc = await getLocation(); return { ...CURRENT(), lat: loc.lat, lon: loc.lon }; }
+    if (place.placeId) {
+      const det = await placeDetails(place.placeId);
+      return { name: place.primary || det.name, address: place.secondary || det.address, lat: det.lat, lon: det.lon };
+    }
+    return { name: place.name || place.label, address: place.address || '', lat: place.lat, lon: place.lon };
+  };
+
   const choose = useCallback(async (place) => {
     buzz(); Keyboard.dismiss();
     setBusy(true); setError(null);
     try {
-      let d;
-      if (place.placeId) {
-        const det = await placeDetails(place.placeId);
-        d = { name: place.primary || det.name, address: place.secondary || det.address, lat: det.lat, lon: det.lon };
+      const resolved = await resolvePlace(place);
+      const newOrigin = editing === 'from' ? resolved : origin;
+      const newDest = editing === 'to' ? resolved : dest;
+      if (editing === 'from') setOrigin(resolved);
+      else { setDest(resolved); if (!resolved.current) addRecent(resolved).then(setRecents); }
+      if (newOrigin && newDest) {
+        setPhase('results');
+        setQuery(''); setSugs([]);
+        await runPlan(newOrigin, newDest, prefer);
       } else {
-        d = { name: place.name || place.label, address: place.address || '', lat: place.lat, lon: place.lon };
+        setEditing(newOrigin ? 'to' : 'from');
+        setQuery(''); setSugs([]);
       }
-      setDest(d);
-      addRecent(d).then(setRecents);
-      const org = await getLocation();
-      setOrigin(org);
-      setPhase('results');
-      await runPlan(org, d, prefer);
     } catch (e) { setError(e.message || 'Could not plan trip'); }
     finally { setBusy(false); }
-  }, [prefer, runPlan]);
+  }, [editing, origin, dest, prefer, runPlan]);
+
+  const editField = useCallback((field) => {
+    setEditing(field); setQuery(''); setSugs([]); setPhase('search');
+  }, []);
 
   const changePrefer = useCallback((p) => {
     setPrefer(p);
     if (origin && dest) runPlan(origin, dest, p);
   }, [origin, dest, runPlan]);
 
-  const backToSearch = useCallback(() => {
-    setPhase('search'); setPlan(null); setRoute(null); setSugs([]); setError(null);
-  }, []);
+  const selectPlan = useCallback(async (idx) => {
+    if (idx === selIdx) return;
+    buzz();
+    setSelIdx(idx);
+    const p = allPlans[idx];
+    if (!p || !origin || !dest) return;
+    setBusy(true);
+    try { setRoute(await buildRoute(origin, p.originStation, p.destStation, dest)); }
+    catch { setRoute(null); }
+    finally { setBusy(false); }
+  }, [selIdx, allPlans, origin, dest]);
 
   const go = useCallback(async () => {
-    if (!plan || !origin || !dest) return;
+    if (!current || !origin || !dest) return;
     buzz(Haptics?.ImpactFeedbackStyle?.Medium);
     let r = route;
     if (!r) {
       setBusy(true);
-      try { r = await buildRoute(origin, plan.best.originStation, plan.best.destStation, dest); }
+      try { r = await buildRoute(origin, current.originStation, current.destStation, dest); }
       catch (e) { setError(e.message || 'Could not start'); setBusy(false); return; }
       setBusy(false);
     }
-    onStartNav && onStartNav({ plan: plan.best, route: r, dest });
-  }, [plan, origin, dest, route, onStartNav]);
+    onStartNav && onStartNav({ plan: current, route: r, dest });
+  }, [current, origin, dest, route, onStartNav]);
 
   const onRemoveRecent = useCallback(async (r) => { setRecents(await removeRecent(r)); }, []);
   const onClearRecents = useCallback(async () => { setRecents(await clearRecents()); }, []);
 
-  const markers = plan
+  const markers = current
     ? [
-        { lat: plan.best.originStation.lat, lon: plan.best.originStation.lon, title: 'Pick up', color: c.good },
-        { lat: plan.best.destStation.lat, lon: plan.best.destStation.lon, title: 'Dock', color: c.danger },
+        { lat: current.originStation.lat, lon: current.originStation.lon, title: 'Pick up', color: c.good },
+        { lat: current.destStation.lat, lon: current.destStation.lon, title: 'Dock', color: c.danger },
         ...(dest ? [{ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.primary }] : []),
       ]
     : [];
@@ -134,13 +164,27 @@ export default function TripScreen({ stations, onStartNav }) {
   // ---- SEARCH ----
   if (phase === 'search') {
     const showRecents = query.trim().length < 3;
+    const originName = origin?.current ? 'My Location' : origin?.name;
     return (
       <View style={styles.flex}>
+        {/* From / To editor */}
+        <View style={styles.odCard}>
+          <TouchableOpacity style={[styles.odRow, editing === 'from' && styles.odRowActive]} onPress={() => setEditing('from')} activeOpacity={0.7}>
+            <Ionicons name="navigate-circle" size={20} color={c.primary} />
+            <Text style={styles.odTxt} numberOfLines={1}>{originName || 'Choose start'}</Text>
+          </TouchableOpacity>
+          <View style={styles.odDivider} />
+          <TouchableOpacity style={[styles.odRow, editing === 'to' && styles.odRowActive]} onPress={() => setEditing('to')} activeOpacity={0.7}>
+            <Ionicons name="location" size={20} color={c.danger} />
+            <Text style={styles.odTxt} numberOfLines={1}>{dest?.name || 'Choose destination'}</Text>
+          </TouchableOpacity>
+        </View>
+
         <View style={styles.searchBar}>
           <Ionicons name="search" size={18} color={c.textMute} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search for a place"
+            placeholder={editing === 'from' ? 'Choose start' : 'Search for a place'}
             placeholderTextColor={c.textFaint}
             value={query}
             onChangeText={onType}
@@ -160,6 +204,9 @@ export default function TripScreen({ stations, onStartNav }) {
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
           {showRecents ? (
             <>
+              {editing === 'from' && (
+                <Row icon="navigate" title="My Location" styles={styles} c={c} onPress={() => choose(CURRENT())} />
+              )}
               {recents.length > 0 && (
                 <View style={styles.sectionRow}>
                   <Text style={styles.section}>Recents</Text>
@@ -170,9 +217,6 @@ export default function TripScreen({ stations, onStartNav }) {
                 <Row key={i} icon="time-outline" title={r.name || r.label} sub={r.address} styles={styles} c={c}
                   onPress={() => choose(r)} onRemove={() => onRemoveRecent(r)} />
               ))}
-              {recents.length === 0 && (
-                <Text style={styles.hint}>Search a destination — DockHop routes you from your current location.</Text>
-              )}
             </>
           ) : (
             sugs.map((s) => (
@@ -184,17 +228,24 @@ export default function TripScreen({ stations, onStartNav }) {
     );
   }
 
-  // ---- RESULTS (Apple-style preview) ----
-  const arrival = plan ? new Date(Date.now() + plan.best.totalSec * 1000) : null;
+  // ---- RESULTS ----
+  const arrivalFor = (p) => formatClock(new Date(Date.now() + p.totalSec * 1000));
   return (
     <ScrollView style={styles.flex} contentContainerStyle={{ paddingBottom: 28 }} keyboardShouldPersistTaps="handled">
-      <TouchableOpacity style={styles.destRow} onPress={backToSearch} activeOpacity={0.7}>
-        <Ionicons name="chevron-back" size={20} color={c.primary} />
-        <View style={styles.destText}>
-          <Text style={styles.fromLine}>From Current Location</Text>
-          <Text style={styles.destLine} numberOfLines={1}>{dest?.name || dest?.label}</Text>
-        </View>
-      </TouchableOpacity>
+      {/* From / To (tap to edit) */}
+      <View style={styles.odCard}>
+        <TouchableOpacity style={styles.odRow} onPress={() => editField('from')} activeOpacity={0.7}>
+          <Ionicons name="navigate-circle" size={20} color={c.primary} />
+          <Text style={styles.odTxt} numberOfLines={1}>{origin?.current ? 'My Location' : origin?.name}</Text>
+          <Ionicons name="chevron-forward" size={16} color={c.textFaint} />
+        </TouchableOpacity>
+        <View style={styles.odDivider} />
+        <TouchableOpacity style={styles.odRow} onPress={() => editField('to')} activeOpacity={0.7}>
+          <Ionicons name="location" size={20} color={c.danger} />
+          <Text style={styles.odTxt} numberOfLines={1}>{dest?.name}</Text>
+          <Ionicons name="chevron-forward" size={16} color={c.textFaint} />
+        </TouchableOpacity>
+      </View>
 
       <View style={styles.prefRow}>
         {[{ k: 'any', label: 'Any bike' }, { k: 'classic', label: 'Classic' }, { k: 'ebike', label: 'E-bike' }].map((o) => (
@@ -209,31 +260,33 @@ export default function TripScreen({ stations, onStartNav }) {
 
       {route && <View style={{ marginTop: 14 }}><RouteMap coords={route.coords} markers={markers} /></View>}
 
-      {plan && (
+      {current && (
         <>
-          {/* Apple-style primary route card with GO */}
+          {/* Selected route card with GO */}
           <View style={styles.bestCard}>
             <View style={styles.bestTop}>
               <View style={styles.flex}>
-                <Text style={styles.bestMin}>{fmtMin(plan.best.totalSec)}</Text>
-                <Text style={styles.bestSub}>{formatClock(arrival)} arrival · {fmtMiles(plan.best.distanceM || 0)}</Text>
-                <Text style={styles.bestType}>on {plan.best.bikeType === 'ebike' ? 'an e-bike' : 'a classic bike'}</Text>
+                <Text style={styles.bestMin}>{fmtMin(current.totalSec)}</Text>
+                <Text style={styles.bestSub}>{arrivalFor(current)} arrival · {fmtMiles(current.distanceM || 0)}</Text>
+                <Text style={styles.bestType}>on {current.bikeType === 'ebike' ? 'an e-bike' : 'a classic bike'}</Text>
               </View>
               <TouchableOpacity style={styles.goBtn} onPress={go} activeOpacity={0.9}>
                 <Text style={styles.goTxt}>GO</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.divider} />
-            <Step icon="🚶" time={fmtMin(plan.best.walkToBikeSec)} title={`Walk to ${plan.best.originStation.name}`} sub={`${plan.best.originStation.classic} regular · ${plan.best.originStation.ebikes} electric`} styles={styles} />
-            <Step icon="🚲" time={fmtMin(plan.best.rideSec)} title="Ride" sub={plan.best.bikeType === 'ebike' ? 'on an e-bike' : 'on a classic bike'} styles={styles} />
-            <Step icon="🅿️" time={fmtMin(plan.best.walkToDestSec)} title={`Dock at ${plan.best.destStation.name}`} sub={`${plan.best.destStation.docks} open docks`} last styles={styles} />
+            <Step icon="🚶" time={fmtMin(current.walkToBikeSec)} title={`Walk to ${current.originStation.name}`} sub={`${current.originStation.classic} regular · ${current.originStation.ebikes} electric`} styles={styles} />
+            <Step icon="🚲" time={fmtMin(current.rideSec)} title="Ride" sub={current.bikeType === 'ebike' ? 'on an e-bike' : 'on a classic bike'} styles={styles} />
+            <Step icon="🅿️" time={fmtMin(current.walkToDestSec)} title={`Dock at ${current.destStation.name}`} sub={`${current.destStation.docks} open docks`} last styles={styles} />
           </View>
 
-          {plan.alternates.map((p, i) => (
-            <View key={i} style={styles.altCard}>
+          {/* Other routes — tap to select */}
+          {allPlans.map((p, i) => i === selIdx ? null : (
+            <TouchableOpacity key={i} style={styles.altCard} onPress={() => selectPlan(i)} activeOpacity={0.7}>
               <Text style={styles.altMin}>{fmtMin(p.totalSec)}</Text>
               <Text style={styles.altTxt} numberOfLines={1}>via {p.originStation.name} → {p.destStation.name}</Text>
-            </View>
+              <Ionicons name="chevron-forward" size={16} color={c.textFaint} />
+            </TouchableOpacity>
           ))}
         </>
       )}
@@ -281,12 +334,17 @@ function Step({ icon, time, title, sub, last, styles }) {
 function makeStyles(c) {
   return StyleSheet.create({
     flex: { flex: 1 },
+    odCard: { marginHorizontal: 16, marginBottom: 10, backgroundColor: c.surface, borderRadius: radius.md, overflow: 'hidden' },
+    odRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 12 },
+    odRowActive: { backgroundColor: c.surfaceAlt },
+    odTxt: { flex: 1, fontSize: 15, color: c.text, fontFamily: font.semibold },
+    odDivider: { height: 1, backgroundColor: c.hairline, marginLeft: 44 },
+
     searchBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surface, borderRadius: radius.md, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 11 : 6, marginHorizontal: 16, marginBottom: 8 },
     searchInput: { flex: 1, fontSize: 16, color: c.text, fontFamily: font.regular },
     sectionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
     section: { fontSize: 12, fontFamily: font.bold, color: c.textMute, textTransform: 'uppercase', letterSpacing: 0.5 },
     clear: { fontSize: 13, fontFamily: font.semibold, color: c.primary },
-    hint: { fontSize: 13, color: c.textMute, fontFamily: font.regular, paddingHorizontal: 16, paddingTop: 12, lineHeight: 19 },
 
     row: { flexDirection: 'row', alignItems: 'center' },
     rowMain: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingLeft: 16 },
@@ -295,12 +353,7 @@ function makeStyles(c) {
     rowTitle: { fontSize: 15, fontFamily: font.semibold, color: c.text },
     rowSub: { fontSize: 12, color: c.textMute, fontFamily: font.regular, marginTop: 1 },
 
-    destRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingBottom: 6 },
-    destText: { flex: 1 },
-    fromLine: { fontSize: 12, color: c.textMute, fontFamily: font.medium },
-    destLine: { fontSize: 17, color: c.text, fontFamily: font.semibold },
-
-    prefRow: { flexDirection: 'row', gap: 6, marginTop: 8, marginHorizontal: 16, backgroundColor: c.surfaceAlt, borderRadius: radius.md, padding: 3 },
+    prefRow: { flexDirection: 'row', gap: 6, marginTop: 4, marginHorizontal: 16, backgroundColor: c.surfaceAlt, borderRadius: radius.md, padding: 3 },
     pref: { flex: 1, paddingVertical: 8, borderRadius: radius.sm, alignItems: 'center' },
     prefOn: { backgroundColor: c.elevated, ...shadow(c).card },
     prefTxt: { fontSize: 13, fontFamily: font.semibold, color: c.textMute },

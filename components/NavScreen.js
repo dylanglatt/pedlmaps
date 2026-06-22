@@ -92,15 +92,18 @@ export default function NavScreen({ trip, onEnd }) {
           )}
         </View>
 
-        {/* Floating map buttons (Apple-style) */}
+        {/* Floating map controls (grouped, Apple-style) */}
         <View style={styles.fab}>
-          <TouchableOpacity style={styles.fabBtn} onPress={() => setVoice(!voiceOn)} activeOpacity={0.85}>
-            <Ionicons name={voiceOn ? 'volume-high' : 'volume-mute'} size={22} color={voiceOn ? c.primary : c.textMute} />
+          <TouchableOpacity style={styles.fabBtn} onPress={() => setVoice(!voiceOn)} activeOpacity={0.7}>
+            <Ionicons name={voiceOn ? 'volume-high' : 'volume-mute'} size={20} color={voiceOn ? c.primary : c.textMute} />
           </TouchableOpacity>
           {here && (
-            <TouchableOpacity style={styles.fabBtn} onPress={() => setHere({ ...here })} activeOpacity={0.85}>
-              <Ionicons name="navigate" size={20} color={c.primary} />
-            </TouchableOpacity>
+            <>
+              <View style={styles.fabSep} />
+              <TouchableOpacity style={styles.fabBtn} onPress={() => setHere({ ...here })} activeOpacity={0.7}>
+                <Ionicons name="navigate" size={18} color={c.primary} />
+              </TouchableOpacity>
+            </>
           )}
         </View>
 
@@ -158,8 +161,9 @@ function makeStyles(c) {
     bannerNext: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
     bannerNextTxt: { color: 'rgba(255,255,255,0.75)', fontSize: 14, fontFamily: font.medium, flex: 1 },
 
-    fab: { position: 'absolute', right: 12, top: Platform.OS === 'ios' ? 170 : 130, gap: 10 },
-    fabBtn: { width: 48, height: 48, borderRadius: 24, backgroundColor: c.elevated, alignItems: 'center', justifyContent: 'center', ...shadow(c).card },
+    fab: { position: 'absolute', right: 14, top: '42%', backgroundColor: c.elevated, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, overflow: 'hidden', ...shadow(c).card },
+    fabBtn: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center' },
+    fabSep: { height: StyleSheet.hairlineWidth, backgroundColor: c.border },
 
     bottom: {
       position: 'absolute', bottom: 0, left: 0, right: 0,
