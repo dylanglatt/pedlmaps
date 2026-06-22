@@ -1,13 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  SafeAreaView,
-  View,
-  Text,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-  Platform,
-  StatusBar,
+  SafeAreaView, View, Text, TouchableOpacity, ActivityIndicator,
+  StyleSheet, Platform, StatusBar,
 } from 'react-native';
 import StationMap from './components/StationMap';
 import StationList from './components/StationList';
@@ -15,14 +9,17 @@ import TripScreen from './components/TripScreen';
 import { fetchStations, nearest } from './lib/gbfs';
 import { getLocation, DEFAULT_CENTER } from './lib/location';
 import { loadSaved, saveSaved } from './lib/storage';
+import { Ionicons } from '@expo/vector-icons';
+import { formatAge } from './lib/geo';
+import { colors, radius, shadow } from './lib/theme';
 
 const REFRESH_MS = 45000;
 
 export default function App() {
   const [all, setAll] = useState([]);
-  const [tab, setTab] = useState('nearby'); // 'nearby' | 'trip'
+  const [tab, setTab] = useState('nearby');
   const [center, setCenter] = useState(DEFAULT_CENTER);
-  const [mode, setMode] = useState('bike'); // 'bike' | 'dock'
+  const [mode, setMode] = useState('bike');
   const [saved, setSaved] = useState({ homeId: null, workId: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -53,22 +50,16 @@ export default function App() {
     return () => clearInterval(timer.current);
   }, [refresh]);
 
-  const stations = useMemo(
-    () => nearest(all, center.lat, center.lon, 75),
-    [all, center]
-  );
+  const stations = useMemo(() => nearest(all, center.lat, center.lon, 75), [all, center]);
 
-  const onToggleSave = useCallback(
-    (which, id) => {
-      setSaved((prev) => {
-        const key = which === 'home' ? 'homeId' : 'workId';
-        const next = { ...prev, [key]: prev[key] === id ? null : id };
-        saveSaved(next);
-        return next;
-      });
-    },
-    []
-  );
+  const onToggleSave = useCallback((which, id) => {
+    setSaved((prev) => {
+      const key = which === 'home' ? 'homeId' : 'workId';
+      const next = { ...prev, [key]: prev[key] === id ? null : id };
+      saveSaved(next);
+      return next;
+    });
+  }, []);
 
   const byId = useMemo(() => {
     const m = {};
@@ -78,17 +69,31 @@ export default function App() {
   const home = saved.homeId ? byId[saved.homeId] : null;
   const work = saved.workId ? byId[saved.workId] : null;
 
+  const statusEl = error ? (
+    <View style={[styles.statusDot, { backgroundColor: colors.danger }]} />
+  ) : (
+    <View style={[styles.statusDot, { backgroundColor: loading ? colors.textFaint : colors.good }]} />
+  );
+
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="dark-content" />
+
+      {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>{tab === 'nearby' ? 'Citi Bike Nearby' : 'Plan a Trip'}</Text>
-        <Text style={styles.sub}>
-          {loading ? 'Loading…' : error ? `⚠ ${error}` : `${stations.length} stations`}
-        </Text>
+        <View style={styles.brandRow}>
+          <Text style={styles.brandMark}>🚲</Text>
+          <Text style={styles.title}>CitiNav</Text>
+        </View>
+        <View style={styles.statusRow}>
+          {statusEl}
+          <Text style={styles.sub}>
+            {error ? error : loading ? 'Loading stations…' : `${stations.length} nearby · updated ${formatAge(Math.floor((updatedAt || Date.now()) / 1000))}`}
+          </Text>
+        </View>
       </View>
 
-      {/* Tab switcher */}
+      {/* Tabs */}
       <View style={styles.tabBar}>
         {[
           { k: 'nearby', label: 'Nearby' },
@@ -98,6 +103,7 @@ export default function App() {
             key={t.k}
             style={[styles.tab, tab === t.k && styles.tabOn]}
             onPress={() => setTab(t.k)}
+            activeOpacity={0.8}
           >
             <Text style={[styles.tabTxt, tab === t.k && styles.tabTxtOn]}>{t.label}</Text>
           </TouchableOpacity>
@@ -107,52 +113,61 @@ export default function App() {
       {tab === 'trip' ? (
         <TripScreen stations={all} />
       ) : (
-      <>
-      {/* Saved home/work quick glance */}
-      {(home || work) && (
-        <View style={styles.savedBar}>
-          {home && (
-            <Text style={styles.savedItem}>🏠 {home.classic} reg · {home.ebikes} elec</Text>
+        <>
+          {/* Saved chips */}
+          {(home || work) && (
+            <View style={styles.savedBar}>
+              {home && (
+                <View style={styles.chip}>
+                  <Ionicons name="home" size={13} color={colors.primary} />
+                  <Text style={styles.chipTxt}>{home.classic} reg · {home.ebikes} elec</Text>
+                </View>
+              )}
+              {work && (
+                <View style={styles.chip}>
+                  <Ionicons name="briefcase" size={13} color={colors.primary} />
+                  <Text style={styles.chipTxt}>{work.docks} docks open</Text>
+                </View>
+              )}
+            </View>
           )}
-          {work && <Text style={styles.savedItem}>💼 {work.docks} docks open</Text>}
-        </View>
-      )}
 
-      {/* Controls */}
-      <View style={styles.controls}>
-        <Seg
-          options={[
-            { k: 'bike', label: 'Need a bike' },
-            { k: 'dock', label: 'Need a dock' },
-          ]}
-          value={mode}
-          onChange={setMode}
-        />
-      </View>
+          {/* Mode segmented control */}
+          <View style={styles.controls}>
+            <Seg
+              options={[
+                { k: 'bike', label: 'Need a bike' },
+                { k: 'dock', label: 'Need a dock' },
+              ]}
+              value={mode}
+              onChange={setMode}
+            />
+          </View>
 
-      {/* Map (top) */}
-      <View style={styles.mapWrap}>
-        {loading ? (
-          <ActivityIndicator style={{ marginTop: 40 }} />
-        ) : (
-          <StationMap
-            stations={stations}
-            center={center}
-            mode={mode}
-          />
-        )}
-      </View>
+          {/* Map */}
+          <View style={styles.mapWrap}>
+            {loading ? (
+              <View style={styles.center}>
+                <ActivityIndicator color={colors.primary} />
+                <Text style={styles.centerTxt}>Finding stations near you…</Text>
+              </View>
+            ) : (
+              <StationMap stations={stations} center={center} mode={mode} />
+            )}
+          </View>
 
-      {/* List (bottom) */}
-      <View style={styles.listWrap}>
-        <StationList
-          stations={stations}
-          mode={mode}
-          saved={saved}
-          onToggleSave={onToggleSave}
-        />
-      </View>
-      </>
+          {/* List */}
+          <View style={styles.listWrap}>
+            {!loading && stations.length === 0 ? (
+              <View style={styles.center}>
+                <Text style={styles.emptyTitle}>No stations nearby</Text>
+                <Text style={styles.centerTxt}>Try again in a moment, or check your connection.</Text>
+              </View>
+            ) : (
+              <StationList stations={stations} mode={mode} saved={saved} onToggleSave={onToggleSave} />
+            )}
+          </View>
+        </>
       )}
     </SafeAreaView>
   );
@@ -166,6 +181,7 @@ function Seg({ options, value, onChange }) {
           key={o.k}
           style={[styles.segItem, value === o.k && styles.segItemOn]}
           onPress={() => onChange(o.k)}
+          activeOpacity={0.8}
         >
           <Text style={[styles.segTxt, value === o.k && styles.segTxtOn]}>{o.label}</Text>
         </TouchableOpacity>
@@ -177,41 +193,50 @@ function Seg({ options, value, onChange }) {
 const styles = StyleSheet.create({
   safe: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: colors.bg,
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
-  header: { paddingHorizontal: 16, paddingTop: 8 },
-  title: { fontSize: 20, fontWeight: '800', color: '#111' },
-  sub: { fontSize: 12, color: '#777', marginTop: 2 },
-  tabBar: { flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingTop: 8 },
-  tab: { flex: 1, paddingVertical: 9, borderRadius: 10, backgroundColor: '#eee', alignItems: 'center' },
-  tabOn: { backgroundColor: '#111' },
-  tabTxt: { fontSize: 14, fontWeight: '700', color: '#666' },
-  tabTxtOn: { color: '#fff' },
-  savedBar: {
+  header: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 4 },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  brandMark: { fontSize: 20 },
+  title: { fontSize: 22, fontWeight: '800', color: colors.text, letterSpacing: -0.3 },
+  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3 },
+  statusDot: { width: 7, height: 7, borderRadius: 4 },
+  sub: { fontSize: 12, color: colors.textMute },
+
+  tabBar: {
     flexDirection: 'row',
-    gap: 16,
-    paddingHorizontal: 16,
-    paddingVertical: 6,
+    backgroundColor: colors.surfaceAlt,
+    borderRadius: radius.pill,
+    padding: 3,
+    marginHorizontal: 16,
+    marginTop: 10,
   },
-  savedItem: { fontSize: 13, fontWeight: '600', color: '#1a73e8' },
-  controls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+  tab: { flex: 1, paddingVertical: 9, borderRadius: radius.pill, alignItems: 'center' },
+  tabOn: { backgroundColor: colors.bg, ...shadow.card },
+  tabTxt: { fontSize: 14, fontWeight: '700', color: colors.textMute },
+  tabTxtOn: { color: colors.text },
+
+  savedBar: { flexDirection: 'row', gap: 8, paddingHorizontal: 16, paddingTop: 12 },
+  chip: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1,
+    borderRadius: radius.pill, paddingVertical: 6, paddingHorizontal: 12,
   },
-  seg: { flexDirection: 'row', backgroundColor: '#eee', borderRadius: 10, padding: 2 },
-  segItem: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8 },
-  segItemOn: { backgroundColor: '#fff', shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
-  segTxt: { fontSize: 13, color: '#666', fontWeight: '600' },
-  segTxtOn: { color: '#111' },
-  pill: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#eee' },
-  pillOn: { backgroundColor: '#1a73e8' },
-  pillDisabled: { opacity: 0.4 },
-  pillTxt: { fontSize: 13, fontWeight: '600', color: '#666' },
-  pillTxtOn: { color: '#fff' },
+  chipIcon: { fontSize: 13 },
+  chipTxt: { fontSize: 13, fontWeight: '700', color: colors.primary },
+
+  controls: { paddingHorizontal: 16, paddingVertical: 12 },
+  seg: { flexDirection: 'row', backgroundColor: colors.surfaceAlt, borderRadius: radius.md, padding: 3 },
+  segItem: { flex: 1, paddingVertical: 8, borderRadius: radius.sm, alignItems: 'center' },
+  segItemOn: { backgroundColor: colors.bg, ...shadow.card },
+  segTxt: { fontSize: 14, color: colors.textMute, fontWeight: '700' },
+  segTxtOn: { color: colors.text },
+
   mapWrap: { flex: 1.1, position: 'relative', overflow: 'hidden' },
-  listWrap: { flex: 1, borderTopWidth: 1, borderTopColor: '#eee' },
+  listWrap: { flex: 1, borderTopWidth: 1, borderTopColor: colors.border },
+
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 8 },
+  centerTxt: { fontSize: 13, color: colors.textMute, textAlign: 'center' },
+  emptyTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
 });

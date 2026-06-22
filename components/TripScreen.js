@@ -8,6 +8,7 @@ import { getLocation } from '../lib/location';
 import { nav } from '../lib/voiceNav';
 import AutocompleteInput from './AutocompleteInput';
 import RouteMap from './RouteMap';
+import { colors, radius, shadow } from '../lib/theme';
 
 const lonlat = (p) => [p.lon, p.lat];
 
@@ -184,40 +185,66 @@ function PlanCard({ plan, title, dim }) {
     <View style={[styles.card, dim && styles.cardDim]}>
       <View style={styles.cardHead}>
         <Text style={styles.cardTitle}>{title}</Text>
-        <Text style={styles.total}>{fmtMin(plan.totalSec)} total</Text>
+        <Text style={styles.total}>{fmtMin(plan.totalSec)}</Text>
       </View>
-      <Text style={styles.leg}>🚶 {fmtMin(plan.walkToBikeSec)} to <Text style={styles.b}>{o.name}</Text></Text>
-      <Text style={styles.sub}>   {o.classic} regular · {o.ebikes} electric</Text>
-      <Text style={styles.leg}>🚲 {fmtMin(plan.rideSec)} ride</Text>
-      <Text style={styles.leg}>🚶 {fmtMin(plan.walkToDestSec)} from <Text style={styles.b}>{d.name}</Text></Text>
-      <Text style={styles.sub}>   {d.docks} open docks</Text>
+      <Step icon="🚶" time={fmtMin(plan.walkToBikeSec)} title={`Walk to ${o.name}`}
+        sub={`${o.classic} regular · ${o.ebikes} electric`} />
+      <Step icon="🚲" time={fmtMin(plan.rideSec)} title="Ride" sub={null} />
+      <Step icon="🅿️" time={fmtMin(plan.walkToDestSec)} title={`Dock at ${d.name}`}
+        sub={`${d.docks} open docks`} last />
+    </View>
+  );
+}
+
+function Step({ icon, time, title, sub, last }) {
+  return (
+    <View style={styles.step}>
+      <View style={styles.stepRail}>
+        <Text style={styles.stepIcon}>{icon}</Text>
+        {!last && <View style={styles.stepLine} />}
+      </View>
+      <View style={styles.stepBody}>
+        <View style={styles.stepTop}>
+          <Text style={styles.stepTitle} numberOfLines={1}>{title}</Text>
+          <Text style={styles.stepTime}>{time}</Text>
+        </View>
+        {!!sub && <Text style={styles.stepSub}>{sub}</Text>}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, backgroundColor: '#fff' },
-  label: { fontSize: 12, color: '#777', marginBottom: 4, marginTop: 10, fontWeight: '600' },
-  input: { borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15 },
-  prefRow: { flexDirection: 'row', gap: 8, marginTop: 12 },
-  pref: { flex: 1, paddingVertical: 9, borderRadius: 10, backgroundColor: '#eee', alignItems: 'center' },
-  prefOn: { backgroundColor: '#1a73e8' },
-  prefTxt: { fontSize: 13, fontWeight: '600', color: '#666' },
-  prefTxtOn: { color: '#fff' },
-  cta: { backgroundColor: '#1a73e8', borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 16 },
-  go: { backgroundColor: '#1a9850' },
-  stop: { backgroundColor: '#c0392b', marginTop: 10 },
-  ctaTxt: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  err: { color: '#c0392b', marginTop: 12 },
+  wrap: { flex: 1, backgroundColor: colors.bg },
+  label: { fontSize: 12, color: colors.textMute, marginBottom: 5, marginTop: 12, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.4 },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.md, padding: 12, fontSize: 15, color: colors.text, backgroundColor: colors.bg },
+  prefRow: { flexDirection: 'row', gap: 8, marginTop: 14, backgroundColor: colors.surfaceAlt, borderRadius: radius.md, padding: 3 },
+  pref: { flex: 1, paddingVertical: 8, borderRadius: radius.sm, alignItems: 'center' },
+  prefOn: { backgroundColor: colors.bg, ...shadow.card },
+  prefTxt: { fontSize: 13, fontWeight: '700', color: colors.textMute },
+  prefTxtOn: { color: colors.text },
+  cta: { backgroundColor: colors.primary, borderRadius: radius.md, paddingVertical: 15, alignItems: 'center', marginTop: 16, ...shadow.card },
+  go: { backgroundColor: colors.good },
+  stop: { backgroundColor: colors.danger, marginTop: 10 },
+  ctaTxt: { color: colors.onPrimary, fontSize: 16, fontWeight: '800' },
+  err: { color: colors.danger, marginTop: 12, fontSize: 13, fontWeight: '600' },
   plan: { marginTop: 8 },
-  card: { borderWidth: 1, borderColor: '#e3e3e3', borderRadius: 12, padding: 14, marginTop: 12 },
-  cardDim: { opacity: 0.7 },
-  cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  cardTitle: { fontSize: 13, fontWeight: '700', color: '#888', textTransform: 'uppercase' },
-  total: { fontSize: 16, fontWeight: '800', color: '#111' },
-  leg: { fontSize: 15, color: '#222', marginTop: 4 },
-  sub: { fontSize: 12, color: '#777' },
-  b: { fontWeight: '700' },
-  navBox: { marginTop: 16, padding: 16, backgroundColor: '#f1f8f3', borderRadius: 12 },
-  navInstr: { fontSize: 20, fontWeight: '700', color: '#1a7a3a', textAlign: 'center' },
+  card: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg, padding: 16, marginTop: 12, backgroundColor: colors.bg, ...shadow.card },
+  cardDim: { opacity: 0.65 },
+  cardHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  cardTitle: { fontSize: 12, fontWeight: '800', color: colors.textMute, textTransform: 'uppercase', letterSpacing: 0.5 },
+  total: { fontSize: 18, fontWeight: '800', color: colors.primary },
+
+  step: { flexDirection: 'row' },
+  stepRail: { width: 28, alignItems: 'center' },
+  stepIcon: { fontSize: 16 },
+  stepLine: { flex: 1, width: 2, backgroundColor: colors.border, marginVertical: 2 },
+  stepBody: { flex: 1, paddingBottom: 12, paddingLeft: 4 },
+  stepTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  stepTitle: { fontSize: 15, fontWeight: '700', color: colors.text, flex: 1, paddingRight: 8 },
+  stepTime: { fontSize: 13, fontWeight: '700', color: colors.textMute },
+  stepSub: { fontSize: 12, color: colors.textMute, marginTop: 1 },
+
+  navBox: { marginTop: 16, padding: 18, backgroundColor: colors.goodBg, borderRadius: radius.lg },
+  navInstr: { fontSize: 20, fontWeight: '800', color: colors.good, textAlign: 'center' },
 });
