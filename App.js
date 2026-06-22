@@ -23,7 +23,6 @@ export default function App() {
   const [tab, setTab] = useState('nearby'); // 'nearby' | 'trip'
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [mode, setMode] = useState('bike'); // 'bike' | 'dock'
-  const [ebikeOnly, setEbikeOnly] = useState(false);
   const [saved, setSaved] = useState({ homeId: null, workId: null });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -113,7 +112,7 @@ export default function App() {
       {(home || work) && (
         <View style={styles.savedBar}>
           {home && (
-            <Text style={styles.savedItem}>🏠 {home.bikes} bikes ({home.ebikes} e)</Text>
+            <Text style={styles.savedItem}>🏠 {home.classic} reg · {home.ebikes} elec</Text>
           )}
           {work && <Text style={styles.savedItem}>💼 {work.docks} docks open</Text>}
         </View>
@@ -129,13 +128,6 @@ export default function App() {
           value={mode}
           onChange={setMode}
         />
-        <TouchableOpacity
-          style={[styles.pill, ebikeOnly && styles.pillOn, mode === 'dock' && styles.pillDisabled]}
-          disabled={mode === 'dock'}
-          onPress={() => setEbikeOnly((v) => !v)}
-        >
-          <Text style={[styles.pillTxt, ebikeOnly && styles.pillTxtOn]}>⚡ E-bikes</Text>
-        </TouchableOpacity>
       </View>
 
       {/* Map (top) */}
@@ -147,7 +139,6 @@ export default function App() {
             stations={stations}
             center={center}
             mode={mode}
-            ebikeOnly={ebikeOnly}
           />
         )}
       </View>
@@ -157,7 +148,6 @@ export default function App() {
         <StationList
           stations={stations}
           mode={mode}
-          ebikeOnly={ebikeOnly}
           saved={saved}
           onToggleSave={onToggleSave}
         />

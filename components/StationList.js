@@ -1,11 +1,11 @@
 import React from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
-import { stationColor, relevantCount } from '../lib/gbfs';
+import { stationColor } from '../lib/gbfs';
 import { formatDistance, formatAge } from '../lib/geo';
 
-export default function StationList({ stations, mode, ebikeOnly, onSelect, saved, onToggleSave }) {
+export default function StationList({ stations, mode, onSelect, saved, onToggleSave }) {
   const renderItem = ({ item: s }) => {
-    const color = stationColor(s, mode, ebikeOnly);
+    const color = stationColor(s, mode);
     const isHome = saved?.homeId === s.id;
     const isWork = saved?.workId === s.id;
     return (
@@ -18,13 +18,13 @@ export default function StationList({ stations, mode, ebikeOnly, onSelect, saved
             {isWork ? '  💼' : ''}
           </Text>
           <Text style={styles.meta}>
-            {formatDistance(s.distance)} · {s.bikes} bikes ({s.ebikes} e) · {s.docks} docks
+            {formatDistance(s.distance)} · {s.classic} reg · {s.ebikes} elec · {s.docks} docks
             {s.disabledBikes ? ` · ${s.disabledBikes} down` : ''} · {formatAge(s.lastReported)}
           </Text>
         </View>
         <View style={styles.bigWrap}>
-          <Text style={[styles.big, { color }]}>{relevantCount(s, mode, ebikeOnly)}</Text>
-          <Text style={styles.bigLabel}>{mode === 'dock' ? 'docks' : ebikeOnly ? 'e' : 'bikes'}</Text>
+          <Text style={[styles.big, { color }]}>{mode === 'dock' ? s.docks : s.bikes}</Text>
+          <Text style={styles.bigLabel}>{mode === 'dock' ? 'docks' : 'bikes'}</Text>
         </View>
         {onToggleSave && (
           <View style={styles.saveCol}>

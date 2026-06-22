@@ -1,11 +1,11 @@
 import React from 'react';
 import { MapContainer, TileLayer, CircleMarker, Popup } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
-import { stationColor, relevantCount } from '../lib/gbfs';
+import { stationColor } from '../lib/gbfs';
 
 // Web map via Leaflet (react-native-maps does not run on web).
 // CircleMarker avoids Leaflet's marker-icon asset issues with bundlers.
-export default function StationMap({ stations, center, mode, ebikeOnly, onSelect }) {
+export default function StationMap({ stations, center, mode, onSelect }) {
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <MapContainer
@@ -25,7 +25,7 @@ export default function StationMap({ stations, center, mode, ebikeOnly, onSelect
             pathOptions={{
               color: '#fff',
               weight: 2,
-              fillColor: stationColor(s, mode, ebikeOnly),
+              fillColor: stationColor(s, mode),
               fillOpacity: 1,
             }}
             eventHandlers={{ click: () => onSelect && onSelect(s) }}
@@ -34,8 +34,8 @@ export default function StationMap({ stations, center, mode, ebikeOnly, onSelect
               <strong>{s.name}</strong>
               <br />
               {mode === 'dock'
-                ? `${s.docks} docks`
-                : `${ebikeOnly ? s.ebikes : s.bikes} ${ebikeOnly ? 'e-bikes' : 'bikes'}`}
+                ? `${s.docks} open docks`
+                : `${s.classic} regular · ${s.ebikes} electric`}
             </Popup>
           </CircleMarker>
         ))}
