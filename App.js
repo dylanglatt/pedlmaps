@@ -31,6 +31,7 @@ export default function App() {
   const [all, setAll] = useState([]);
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [mode, setMode] = useState('bike');
+  const [bikeType, setBikeType] = useState('both'); // 'both' | 'classic' | 'electric'
   const [selectedId, setSelectedId] = useState(null);
   const [saved, setSaved] = useState({ homeId: null, workId: null });
   const [loading, setLoading] = useState(true);
@@ -111,6 +112,20 @@ export default function App() {
             </TouchableOpacity>
           ))}
         </View>
+        {mode === 'bike' && (
+          <View style={styles.typeRow}>
+            {[
+              { k: 'both', label: 'Both', icon: null },
+              { k: 'classic', label: 'Classic', icon: 'bicycle' },
+              { k: 'electric', label: 'Electric', icon: 'flash' },
+            ].map((o) => (
+              <TouchableOpacity key={o.k} style={[styles.chip, bikeType === o.k && styles.chipOn]} onPress={() => setBikeType(o.k)} activeOpacity={0.8}>
+                {o.icon && <Ionicons name={o.icon} size={13} color={bikeType === o.k ? c.onPrimary : c.textMute} />}
+                <Text style={[styles.chipTxt, bikeType === o.k && styles.chipTxtOn]}>{o.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
     );
 
@@ -124,7 +139,7 @@ export default function App() {
           <Text style={styles.centerTxt}>Finding stations near you…</Text>
         </View>
       ) : (
-        <StationMap stations={all} center={center} mode={mode} selectedId={selectedId} onSelect={(s) => setSelectedId(s.id)} />
+        <StationMap stations={all} center={center} mode={mode} bikeType={bikeType} selectedId={selectedId} onSelect={(s) => setSelectedId(s.id)} />
       )}
 
       <BottomSheet index={sheetIndex} onIndexChange={setSheetIndex} renderHeader={Header}>
@@ -139,6 +154,7 @@ export default function App() {
           <StationList
             stations={stations}
             mode={mode}
+            bikeType={bikeType}
             saved={saved}
             onToggleSave={onToggleSave}
             onSelect={(s) => { setSelectedId(s.id); setCenter({ lat: s.lat, lon: s.lon }); }}
@@ -168,6 +184,12 @@ function makeStyles(c) {
     segItemOn: { backgroundColor: c.elevated, ...shadow(c).card },
     segTxt: { fontSize: 14, color: c.textMute, fontFamily: font.semibold },
     segTxtOn: { color: c.text },
+
+    typeRow: { flexDirection: 'row', gap: 8 },
+    chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
+    chipOn: { backgroundColor: c.primary, borderColor: c.primary },
+    chipTxt: { fontSize: 13, fontFamily: font.semibold, color: c.textMute },
+    chipTxtOn: { color: c.onPrimary },
 
     planHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10 },
     planTitle: { fontFamily: font.display, fontSize: 18, color: c.text },

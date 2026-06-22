@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { availabilityLevel } from '../lib/gbfs';
+import { availabilityLevel, countFor } from '../lib/gbfs';
 import { formatDistance, formatAge } from '../lib/geo';
 import { useTheme, levelColor, radius, font } from '../lib/theme';
 import OccupancyBar from './OccupancyBar';
@@ -10,21 +10,24 @@ let Haptics = null;
 try { Haptics = require('expo-haptics'); } catch {}
 const tap = () => { if (Haptics && Platform.OS !== 'web') Haptics.selectionAsync(); };
 
-export default function StationList({ stations, mode, onSelect, saved, onToggleSave, scroll = true }) {
+const BADGE_LABEL = { dock: 'docks', electric: 'e-bikes', classic: 'classic', both: 'bikes' };
+
+export default function StationList({ stations, mode, bikeType = 'both', onSelect, saved, onToggleSave, scroll = true }) {
   const c = useTheme();
   const styles = useMemo(() => makeStyles(c), [c]);
 
   const renderItem = ({ item: s }) => {
-    const level = availabilityLevel(s, mode);
+    const level = availabilityLevel(s, mode, bikeType);
     const lc = levelColor(c, level);
-    const count = mode === 'dock' ? s.docks : s.bikes;
+    const count = countFor(s, mode, bikeType);
+    const badgeLabel = mode === 'dock' ? 'docks' : BADGE_LABEL[bikeType];
     const isHome = saved?.homeId === s.id;
     const isWork = saved?.workId === s.id;
     return (
       <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => onSelect && onSelect(s)}>
         <View style={[styles.badge, { backgroundColor: lc.bg }]}>
           <Text style={[styles.badgeNum, { color: lc.fg }]}>{count}</Text>
-          <Text style={[styles.badgeLabel, { color: lc.fg }]}>{mode === 'dock' ? 'docks' : 'bikes'}</Text>
+          <Text style={[styles.badgeLabel, { color: lc.fg }]}>{badgeLabel}</Text>
         </View>
 
         <View style={styles.body}>

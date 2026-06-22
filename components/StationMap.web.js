@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-import { availabilityLevel } from '../lib/gbfs';
+import { availabilityLevel, countFor } from '../lib/gbfs';
 import { useTheme } from '../lib/theme';
 
 // Premium muted basemaps (free, attribution required).
@@ -11,19 +11,26 @@ const TILES = {
   dark: 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
 };
 
-function pillIcon(n, color, ring, selected) {
+function pillIcon(inner, color, ring, selected) {
   const scale = selected ? 1.25 : 1;
   return L.divIcon({
     className: '',
-    iconSize: [34, 26],
-    iconAnchor: [17, 13],
+    iconSize: [40, 26],
+    iconAnchor: [20, 13],
     html: `<div style="transform:scale(${scale});background:${color};color:#fff;border:2px solid ${ring};
-      border-radius:13px;min-width:26px;height:26px;display:flex;align-items:center;justify-content:center;
-      font:800 13px Inter,system-ui,sans-serif;padding:0 7px;box-shadow:0 1px 4px rgba(0,0,0,.35)">${n}</div>`,
+      border-radius:13px;min-width:26px;height:26px;display:flex;align-items:center;justify-content:center;gap:2px;
+      font:800 13px Inter,system-ui,sans-serif;padding:0 8px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.35)">${inner}</div>`,
   });
 }
 
-export default function StationMap({ stations, center, mode, selectedId, onSelect }) {
+function innerHtml(s, mode, bikeType) {
+  if (mode === 'dock') return `${s.docks}`;
+  if (bikeType === 'both') return `⚡${s.ebikes} <span style="opacity:.5">·</span> ${s.classic}`;
+  if (bikeType === 'electric') return `⚡${s.ebikes}`;
+  return `${s.classic}`;
+}
+
+export default function StationMap({ stations, center, mode, bikeType = 'both', selectedId, onSelect }) {
   const c = useTheme();
   const tile = c.scheme === 'dark' ? TILES.dark : TILES.light;
 
@@ -31,11 +38,10 @@ export default function StationMap({ stations, center, mode, selectedId, onSelec
   const markers = useMemo(
     () =>
       stations.map((s) => {
-        const level = availabilityLevel(s, mode);
-        const n = mode === 'dock' ? s.docks : s.bikes;
-        return { s, icon: pillIcon(n, c[level], c.bg, selectedId === s.id) };
+        const level = availabilityLevel(s, mode, bikeType);
+        return { s, icon: pillIcon(innerHtml(s, mode, bikeType), c[level], c.bg, selectedId === s.id) };
       }),
-    [stations, mode, selectedId, c]
+    [stations, mode, bikeType, selectedId, c]
   );
 
   return (
