@@ -1,17 +1,30 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator,
-  StyleSheet, Platform, Keyboard,
+  StyleSheet, Platform, Keyboard, Alert,
 } from 'react-native';
 import Icon from './Icon';
+import SavedPlacesRow from './SavedPlacesRow';
+import FavoritesManager from './FavoritesManager';
 import { directions, WALK, BIKE } from '../lib/routing';
 import { autocomplete, placeDetails } from '../lib/places';
 import { planTrip, fmtMin, fmtMiles } from '../lib/tripPlanner';
 import { getLocation } from '../lib/location';
 import { loadRecents, addRecent, removeRecent, clearRecents } from '../lib/storage';
+import { loadPlaces, addPlace, updatePlace, removePlace, makePlace } from '../lib/savedPlaces';
 import { formatClock } from '../lib/geo';
 import RouteMap from './RouteMap';
 import { useTheme, radius, font, shadow } from '../lib/theme';
+
+// Name a place to save (iOS prompt; elsewhere defaults to the place name).
+function promptNickname(defaultName, cb) {
+  if (Platform.OS === 'ios' && Alert.prompt) {
+    Alert.prompt('Name this place', null,
+      (text) => cb((text || '').trim() || defaultName), 'plain-text', defaultName);
+  } else {
+    cb(defaultName);
+  }
+}
 
 let Haptics = null;
 try { Haptics = require('expo-haptics'); } catch {}
@@ -46,6 +59,10 @@ export default function TripScreen({ stations, onStartNav }) {
   const [query, setQuery] = useState('');
   const [sugs, setSugs] = useState([]);
   const [recents, setRecents] = useState([]);
+  const [places, setPlaces] = useState([]);
+  const [saving, setSaving] = useState(false);   // "pick a place to save" mode
+  const [saveType, setSaveType] = useState('custom'); // home | work | custom
+  const [showManager, setShowManager] = useState(false);
   const [origin, setOrigin] = useState(null);   // resolved {name,lat,lon,current?}
   const [dest, setDest] = useState(null);
   const [prefer, setPrefer] = useState('any');
@@ -58,6 +75,7 @@ export default function TripScreen({ stations, onStartNav }) {
 
   useEffect(() => {
     loadRecents().then(setRecents);
+    loadPlaces().then(setPlaces);
     getLocation().then((loc) => setOrigin({ ...CURRENT(), lat: loc.lat, lon: loc.lon })).catch(() => {});
   }, []);
 
@@ -100,6 +118,19 @@ export default function TripScreen({ stations, onStartNav }) {
     setBusy(true); setError(null);
     try {
       const resolved = await resolvePlace(place);
+      if (saving) {
+        const finish = async (nickname, type) => {
+          await addPlace(makePlace({ nickname, type, lat: resolved.lat, lon: resolved.lon, address: resolved.address }));
+          setPlaces(await loadPlaces());
+        };
+        if (saveType === 'home' || saveType === 'work') {
+          finish(saveType === 'home' ? 'Home' : 'Work', saveType);
+        } else {
+          promptNickname(resolved.name, (nickname) => finish(nickname, 'custom'));
+        }
+        setSaving(false); setSaveType('custom'); setQuery(''); setSugs([]); setBusy(false);
+        return;
+      }
       const newOrigin = editing === 'from' ? resolved : origin;
       const newDest = editing === 'to' ? resolved : dest;
       if (editing === 'from') setOrigin(resolved);
@@ -114,7 +145,28 @@ export default function TripScreen({ stations, onStartNav }) {
       }
     } catch (e) { setError(e.message || 'Could not plan trip'); }
     finally { setBusy(false); }
-  }, [editing, origin, dest, prefer, runPlan]);
+  }, [editing, origin, dest, prefer, runPlan, saving, saveType]);
+
+  const startSave = useCallback((type) => {
+    setSaveType(type); setSaving(true); setShowManager(false); setQuery(''); setSugs([]);
+  }, []);
+  const onAddPlace = useCallback(() => startSave('custom'), [startSave]);
+
+  const refreshPlaces = useCallback(async () => setPlaces(await loadPlaces()), []);
+  const onRenamePlace = useCallback(async (p, name) => { await updatePlace(p.id, { nickname: name }); refreshPlaces(); }, [refreshPlaces]);
+  const onDeletePlace = useCallback(async (p) => { await removePlace(p.id); refreshPlaces(); }, [refreshPlaces]);
+
+  // Save a search suggestion straight to favorites (star on the result row).
+  const saveSuggestion = async (s) => {
+    buzz();
+    try {
+      const resolved = await resolvePlace(s);
+      promptNickname(resolved.name, async (nickname) => {
+        await addPlace(makePlace({ nickname, type: 'custom', lat: resolved.lat, lon: resolved.lon, address: resolved.address }));
+        refreshPlaces();
+      });
+    } catch {}
+  };
 
   const editField = useCallback((field) => {
     setEditing(field); setQuery(''); setSugs([]); setPhase('search');
@@ -184,7 +236,7 @@ export default function TripScreen({ stations, onStartNav }) {
           <Icon name="search" size={18} color={c.textMute} />
           <TextInput
             style={styles.searchInput}
-            placeholder={editing === 'from' ? 'Choose start' : 'Search for a place'}
+            placeholder={saving ? 'Search a place to save' : editing === 'from' ? 'Choose start' : 'Search for a place'}
             placeholderTextColor={c.textFaint}
             value={query}
             onChangeText={onType}
@@ -204,6 +256,16 @@ export default function TripScreen({ stations, onStartNav }) {
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
           {showRecents ? (
             <>
+              {!saving && places.length > 0 && (
+                <SavedPlacesRow
+                  places={places}
+                  from={origin && origin.lat != null ? origin : null}
+                  onPick={choose}
+                  onAdd={onAddPlace}
+                  onAddType={startSave}
+                  onManage={() => setShowManager(true)}
+                />
+              )}
               {editing === 'from' && (
                 <Row icon="navigate" title="My Location" styles={styles} c={c} onPress={() => choose(CURRENT())} />
               )}
@@ -220,10 +282,20 @@ export default function TripScreen({ stations, onStartNav }) {
             </>
           ) : (
             sugs.map((s) => (
-              <Row key={s.placeId} icon="pin" title={s.primary} sub={s.secondary} styles={styles} c={c} onPress={() => choose(s)} />
+              <Row key={s.placeId} icon="pin" title={s.primary} sub={s.secondary} styles={styles} c={c} onPress={() => choose(s)} onSave={!saving ? () => saveSuggestion(s) : undefined} />
             ))
           )}
         </ScrollView>
+
+        <FavoritesManager
+          visible={showManager}
+          onClose={() => setShowManager(false)}
+          places={places}
+          onAdd={onAddPlace}
+          onAddType={startSave}
+          onRename={onRenamePlace}
+          onDelete={onDeletePlace}
+        />
       </View>
     );
   }
@@ -297,7 +369,7 @@ export default function TripScreen({ stations, onStartNav }) {
   );
 }
 
-function Row({ icon, title, sub, onPress, onRemove, styles, c }) {
+function Row({ icon, title, sub, onPress, onRemove, onSave, styles, c }) {
   return (
     <View style={styles.row}>
       <TouchableOpacity style={styles.rowMain} onPress={onPress} activeOpacity={0.7}>
@@ -307,6 +379,11 @@ function Row({ icon, title, sub, onPress, onRemove, styles, c }) {
           {!!sub && <Text style={styles.rowSub} numberOfLines={1}>{sub}</Text>}
         </View>
       </TouchableOpacity>
+      {onSave && (
+        <TouchableOpacity onPress={onSave} hitSlop={8} style={styles.rowRemove}>
+          <Icon name="star" size={18} color={c.textFaint} />
+        </TouchableOpacity>
+      )}
       {onRemove && (
         <TouchableOpacity onPress={onRemove} hitSlop={8} style={styles.rowRemove}>
           <Icon name="close" size={16} color={c.textFaint} />

@@ -96,32 +96,6 @@ function AppInner() {
 
   const changeUnits = useCallback((u) => { setUnits(u); saveUnits(u); }, []);
 
-  // Save/unsave a place from a station row. Home/Work are single; custom is named.
-  const onToggleSave = useCallback(async (which, station) => {
-    const existing = places.find((p) => p.type === which && p.stationId === station.id);
-    if (existing) { await removePlace(existing.id); return reloadPlaces(); }
-    const base = { lat: station.lat, lon: station.lon, stationId: station.id };
-    if (which === 'custom') {
-      promptNickname(station.name, async (nickname) => {
-        await addPlace(makePlace({ ...base, type: 'custom', nickname }));
-        reloadPlaces();
-      });
-      return;
-    }
-    await addPlace(makePlace({ ...base, type: which, nickname: which === 'home' ? 'Home' : 'Work' }));
-    reloadPlaces();
-  }, [places, reloadPlaces]);
-
-  // Flip a place between bikes/docks (optimistic, then persisted).
-  const onFlipPlace = useCallback(async (place, newMode) => {
-    setPlaces((prev) => prev.map((p) => (p.id === place.id ? { ...p, flipMode: newMode } : p)));
-    await setFlipMode(place.id, newMode);
-  }, []);
-
-  const onRemovePlace = useCallback(async (place) => {
-    await removePlace(place.id); reloadPlaces();
-  }, [reloadPlaces]);
-
   const openSearch = useCallback(() => { setSearching(true); setSheetIndex(2); }, []);
   const closeSearch = useCallback(() => { setSearching(false); setSheetIndex(1); }, []);
 
