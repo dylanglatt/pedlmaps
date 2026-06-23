@@ -34,3 +34,5 @@ yarn-error.*
 
 scripts/__pycache__/
 scripts/snapshots.csv
+assets/pedl logo.png
+assets/icon-dockhop-backup.png
