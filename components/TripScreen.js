@@ -155,9 +155,9 @@ export default function TripScreen({ stations, onStartNav }) {
 
   const markers = current
     ? [
-        { lat: current.originStation.lat, lon: current.originStation.lon, title: 'Pick up', color: c.good },
-        { lat: current.destStation.lat, lon: current.destStation.lon, title: 'Dock', color: c.danger },
-        ...(dest ? [{ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.primary }] : []),
+        { lat: current.originStation.lat, lon: current.originStation.lon, title: `Pick up · ${current.originStation.name}`, color: c.good },
+        { lat: current.destStation.lat, lon: current.destStation.lon, title: `Dock · ${current.destStation.name}`, color: c.danger },
+        ...(dest ? [{ lat: dest.lat, lon: dest.lon, title: dest.name || 'Destination', color: c.primary }] : []),
       ]
     : [];
 
