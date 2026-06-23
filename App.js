@@ -12,6 +12,7 @@ import SavedPlaceCard from './components/SavedPlaceCard';
 import TripScreen from './components/TripScreen';
 import BottomSheet from './components/BottomSheet';
 import NavScreen from './components/NavScreen';
+import Feedback from './components/Feedback';
 import Icon from './components/Icon';
 import { fetchStations, nearest } from './lib/gbfs';
 import { getLocation, DEFAULT_CENTER } from './lib/location';
@@ -100,6 +101,8 @@ function AppInner() {
   const openSearch = useCallback(() => { setSearching(true); setSheetIndex(2); }, []);
   const closeSearch = useCallback(() => { setSearching(false); setSheetIndex(1); }, []);
 
+  const [feedback, setFeedback] = useState(null); // screen name when the feedback sheet is open
+
   const styles = useMemo(() => makeStyles(c), [c]);
 
   const statusColor = error ? c.danger : loading ? c.textFaint : c.good;
@@ -108,18 +111,24 @@ function AppInner() {
   const Header = () =>
     searching ? (
       <View style={styles.planHead}>
-        <Text style={styles.planTitle}>Plan a trip</Text>
+        <View style={styles.titleRow}>
+          <Text style={styles.planTitle}>Plan a trip</Text>
+          <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Plan a trip')} activeOpacity={0.8} hitSlop={6}>
+            <Icon name="chat" size={11} color={c.onPrimary} />
+            <Text style={styles.betaTxt}>BETA</Text>
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity onPress={closeSearch} hitSlop={10}>
           <Text style={styles.cancel}>Cancel</Text>
         </TouchableOpacity>
       </View>
     ) : (
       <View style={styles.browseHead}>
-        <View style={styles.statusRow}>
-          <View style={styles.statusLine}>
-            <View style={[styles.dot, { backgroundColor: statusColor }]} />
-            <Text style={styles.statusTxt} numberOfLines={1}>{statusText}</Text>
-          </View>
+        <View style={styles.headTop}>
+          <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Nearby')} activeOpacity={0.8} hitSlop={6}>
+            <Icon name="chat" size={11} color={c.onPrimary} />
+            <Text style={styles.betaTxt}>BETA</Text>
+          </TouchableOpacity>
           <View style={styles.unitToggle}>
             {[{ k: 'imperial', label: 'mi' }, { k: 'metric', label: 'km' }].map((u) => (
               <TouchableOpacity key={u.k} style={[styles.unitItem, units === u.k && styles.unitItemOn]} onPress={() => changeUnits(u.k)} activeOpacity={0.8}>
@@ -127,6 +136,10 @@ function AppInner() {
               </TouchableOpacity>
             ))}
           </View>
+        </View>
+        <View style={styles.statusLine}>
+          <View style={[styles.dot, { backgroundColor: statusColor }]} />
+          <Text style={styles.statusTxt} numberOfLines={1}>{statusText}</Text>
         </View>
         <TouchableOpacity style={styles.search} onPress={openSearch} activeOpacity={0.8}>
           <Icon name="search" size={18} color={c.textMute} />
@@ -185,6 +198,8 @@ function AppInner() {
       {chartStation && <StationSheet station={chartStation} initialMode={mode} onClose={() => setChartId(null)} />}
 
       {navTrip && <NavScreen trip={navTrip} onEnd={() => setNavTrip(null)} />}
+
+      <Feedback visible={!!feedback} screen={feedback} onClose={() => setFeedback(null)} />
     </View>
   );
 }
@@ -194,6 +209,10 @@ function makeStyles(c) {
     root: { flex: 1, backgroundColor: c.bg },
     dot: { width: 7, height: 7, borderRadius: 4 },
     statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    headTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    betaPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: c.primary, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 4, marginRight: 8 },
+    betaTxt: { color: c.onPrimary, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+    titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     statusLine: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 2, flexShrink: 1 },
     statusTxt: { fontSize: 12, color: c.textMute, fontWeight: '500' },
     unitToggle: { flexDirection: 'row', backgroundColor: c.surfaceAlt, borderRadius: radius.pill, padding: 2, marginLeft: 8 },
