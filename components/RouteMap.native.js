@@ -4,7 +4,7 @@ import MapView, { Polyline, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 
 // Route polyline + markers. `fill` makes it full-bleed; `follow` recenters on a
 // moving point (for active navigation); `showUser` shows the location puck.
-export default function RouteMap({ coords, markers, fill, follow, overview, showUser }) {
+export default function RouteMap({ coords, markers, fill, follow, overview, showUser, markersOnly }) {
   const ref = useRef(null);
   useEffect(() => {
     if (follow && ref.current) {
@@ -21,18 +21,25 @@ export default function RouteMap({ coords, markers, fill, follow, overview, show
     }
   }, [overview]);
 
-  if (!coords || !coords.length) return null;
-  const pts = coords.map(([lat, lon]) => ({ latitude: lat, longitude: lon }));
+  const hasCoords = coords && coords.length;
+  const hasMarkers = markers && markers.length;
+  if (!hasCoords && !(markersOnly && hasMarkers)) return null;
+  const regionPts = hasCoords ? coords : markers.map((m) => [m.lat, m.lon]);
+  const pts = hasCoords ? coords.map(([lat, lon]) => ({ latitude: lat, longitude: lon })) : [];
   return (
     <MapView
       ref={ref}
       provider={PROVIDER_DEFAULT}
       style={fill ? StyleSheet.absoluteFill : styles.map}
       showsUserLocation={!!showUser}
-      initialRegion={region(coords)}
+      initialRegion={region(regionPts)}
     >
-      <Polyline coordinates={pts} strokeColor="#3B34B8" strokeWidth={9} lineCap="round" lineJoin="round" />
-      <Polyline coordinates={pts} strokeColor="#5B53E6" strokeWidth={6} lineCap="round" lineJoin="round" />
+      {!markersOnly && hasCoords && (
+        <>
+          <Polyline coordinates={pts} strokeColor="#3B34B8" strokeWidth={9} lineCap="round" lineJoin="round" />
+          <Polyline coordinates={pts} strokeColor="#5B53E6" strokeWidth={6} lineCap="round" lineJoin="round" />
+        </>
+      )}
       {(markers || []).map((m, i) => (
         <Marker key={i} coordinate={{ latitude: m.lat, longitude: m.lon }} title={m.title} pinColor={m.color} />
       ))}

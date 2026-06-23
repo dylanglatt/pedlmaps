@@ -102,11 +102,21 @@ export default function NavScreen({ trip, onEnd }) {
 
   const setVoice = (v) => { setVoiceOn(v); nav.setMuted(!v); };
 
-  const markers = [
-    { lat: plan.originStation.lat, lon: plan.originStation.lon, title: 'Pick up', color: c.good },
-    { lat: plan.destStation.lat, lon: plan.destStation.lon, title: 'Dock', color: c.danger },
-    ...(dest ? [{ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.primary }] : []),
-  ];
+  const markers = [];
+  if (plan.segments) {
+    plan.segments.forEach((seg) => {
+      markers.push({ lat: seg.originStation.lat, lon: seg.originStation.lon, title: 'Pick up', color: c.good });
+      markers.push({ lat: seg.destStation.lat, lon: seg.destStation.lon, title: 'Dock', color: c.danger });
+    });
+    (plan.points || []).slice(1, -1).forEach((pt) => markers.push({ lat: pt.lat, lon: pt.lon, title: pt.name || 'Stop', color: c.accent2 }));
+    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.primary });
+  } else {
+    markers.push(
+      { lat: plan.originStation.lat, lon: plan.originStation.lon, title: 'Pick up', color: c.good },
+      { lat: plan.destStation.lat, lon: plan.destStation.lon, title: 'Dock', color: c.danger },
+    );
+    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.primary });
+  }
   const distLabel = fmtDist(dist);
 
   return (
@@ -157,7 +167,10 @@ export default function NavScreen({ trip, onEnd }) {
             <View style={styles.expand}>
               <View style={styles.optRow}>
                 <Icon name="star" size={18} color={c.primary} />
-                <Text style={styles.optTxt} numberOfLines={1}>{dest?.name || dest?.label || 'Destination'}</Text>
+                <View style={styles.flex}>
+                  <Text style={styles.optName} numberOfLines={1}>{dest?.name || dest?.label || 'Destination'}</Text>
+                  {!!dest?.address && <Text style={styles.optSub} numberOfLines={1}>{dest.address}</Text>}
+                </View>
               </View>
               <View style={styles.optRow}>
                 <Icon name={voiceOn ? 'volumeOn' : 'volumeOff'} size={18} color={c.textMute} />
@@ -216,6 +229,8 @@ function makeStyles(c) {
     expand: { paddingHorizontal: 20, paddingTop: 6, gap: 4 },
     optRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.surface, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 13, marginBottom: 8 },
     optTxt: { flex: 1, fontSize: 15, color: c.text, fontWeight: '600' },
+    optName: { fontSize: 15, color: c.text, fontWeight: '600' },
+    optSub: { fontSize: 12.5, color: c.textMute, fontWeight: '400', marginTop: 2 },
     end: { backgroundColor: c.danger, borderRadius: radius.md, paddingVertical: 15, alignItems: 'center', marginTop: 4 },
     endTxt: { color: '#fff', fontSize: 17, fontWeight: '800' },
   });
