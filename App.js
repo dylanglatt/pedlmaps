@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, ActivityIndicator, StyleSheet, StatusBar,
+  View, Text, TouchableOpacity, StyleSheet, StatusBar,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
@@ -129,14 +129,8 @@ function AppInner() {
     <View style={styles.root}>
       <StatusBar barStyle={c.scheme === 'dark' ? 'light-content' : 'dark-content'} />
 
-      {loading ? (
-        <View style={styles.center}>
-          <ActivityIndicator color={c.primary} />
-          <Text style={styles.centerTxt}>Finding stations near you…</Text>
-        </View>
-      ) : (
-        <StationMap stations={all} center={center} mode={mode} bikeType={bikeType} selectedId={selectedId} onSelect={(s) => setSelectedId(s.id)} />
-      )}
+      <StationMap stations={all} center={center} mode={mode} bikeType={bikeType} selectedId={selectedId} onSelect={(s) => setSelectedId(s.id)} />
+
 
       <BottomSheet index={sheetIndex} onIndexChange={setSheetIndex} renderHeader={Header} bottomInset={insets.bottom}>
         {searching ? (
