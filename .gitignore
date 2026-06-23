@@ -31,3 +31,6 @@ npm-debug.*
 yarn-error.*
 .idea/
 .vscode/
+
+scripts/__pycache__/
+scripts/snapshots.csv

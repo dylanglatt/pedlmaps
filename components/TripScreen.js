@@ -10,12 +10,26 @@ import ReorderPair from './ReorderPair';
 import { directions, WALK, BIKE } from '../lib/routing';
 import { autocomplete, placeDetails } from '../lib/places';
 import { planTrip, planMultiTrip, fmtMin, fmtMiles } from '../lib/tripPlanner';
+import { TRIP } from '../lib/config';
 import { getLocation } from '../lib/location';
 import { loadRecents, addRecent, removeRecent, clearRecents } from '../lib/storage';
 import { loadPlaces, addPlace, updatePlace, removePlace, makePlace, placeLabel } from '../lib/savedPlaces';
 import { formatClock, distanceMeters, formatDistance } from '../lib/geo';
 import RouteMap from './RouteMap';
 import { useTheme, radius, font, shadow } from '../lib/theme';
+
+// Next multiple-of-5 minutes, `mins` from now — a sensible default target time.
+function roundUpTime(mins) {
+  const t = new Date(Date.now() + mins * 60000);
+  t.setSeconds(0, 0);
+  t.setMinutes(Math.ceil(t.getMinutes() / 5) * 5);
+  return t;
+}
+// "8 AM" style hour label for the prediction confidence pill.
+function fmtHour(h) {
+  const ap = h < 12 ? 'AM' : 'PM';
+  return `${h % 12 || 12} ${ap}`;
+}
 
 // Name a place to save (iOS prompt; elsewhere defaults to the place name).
 function promptNickname(defaultName, cb) {
@@ -88,6 +102,11 @@ export default function TripScreen({ stations, onStartNav }) {
   const [prefer, setPrefer] = useState('any');
   const [plan, setPlan] = useState(null);        // current route: { kind:'single'|'multi', ... }
   const [points, setPoints] = useState(null);    // [origin, ...stops, dest] for multi-stop nav
+  const [timeMode, setTimeMode] = useState('now');    // 'now' | 'depart' | 'arrive'
+  const [targetTime, setTargetTime] = useState(null); // Date for depart/arrive
+  const [sched, setSched] = useState(null);           // { mode, leaveBy?, depart?, arrive, day, hour }
+  const timeModeRef = useRef('now'); timeModeRef.current = timeMode;
+  const targetTimeRef = useRef(null); targetTimeRef.current = targetTime;
   const [route, setRoute] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -109,20 +128,38 @@ export default function TripScreen({ stations, onStartNav }) {
   }, []);
 
   const current = plan;
+  const isTomorrow = !!targetTime && targetTime.getDate() !== new Date().getDate();
 
   const runPlan = useCallback(async (org, midsArr, d, pref) => {
-    setBusy(true); setError(null); setPlan(null); setPoints(null); setRoute(null);
+    setBusy(true); setError(null); setPlan(null); setPoints(null); setRoute(null); setSched(null);
     const clean = (midsArr || []).filter(Boolean);
+    // For a future departure/arrival, plan on PREDICTED availability at that hour;
+    // for "now", use live GBFS. Routes (locations) are time-independent.
+    const mode = timeModeRef.current;
+    const target = targetTimeRef.current;
+    const future = mode !== 'now' && !!target;
+    const finishSched = (totalSec) => {
+      if (!future) return;
+      if (mode === 'arrive') {
+        const leaveBy = new Date(target.getTime() - (totalSec + TRIP.arriveBufferSec) * 1000);
+        setSched({ mode, leaveBy, arrive: target, day: target.getDay(), hour: target.getHours() });
+      } else {
+        const arrive = new Date(target.getTime() + totalSec * 1000);
+        setSched({ mode, depart: target, arrive, day: target.getDay(), hour: target.getHours() });
+      }
+    };
     try {
       if (clean.length === 0) {
         const { best } = await planTrip({ origin: org, dest: d, stations, prefer: pref });
         setPlan({ ...best, kind: 'single' });
+        finishSched(best.totalSec);
         try { setRoute(await buildRoute(org, best.originStation, best.destStation, d)); }
         catch { setRoute(null); }
       } else {
         const pts = [org, ...clean, d];
         const mt = await planMultiTrip({ points: pts, stations, prefer: pref });
         setPlan({ ...mt, kind: 'multi' }); setPoints(pts);
+        finishSched(mt.totalSec);
         try { setRoute(await buildMultiRoute(pts, mt.segments)); }
         catch { setRoute(null); }
       }
@@ -130,6 +167,28 @@ export default function TripScreen({ stations, onStartNav }) {
     finally { setBusy(false); }
   }, [stations]);
 
+  // Apply a time mode / target and replan. Refs are set synchronously so runPlan
+  // (which reads the refs) sees the new values immediately.
+  const applyTime = useCallback((mode, time) => {
+    const t = mode === 'now' ? targetTimeRef.current : (time || targetTimeRef.current || roundUpTime(30));
+    timeModeRef.current = mode;
+    targetTimeRef.current = t;
+    setTimeMode(mode);
+    if (mode !== 'now') setTargetTime(t);
+    if (origin && dest) runPlan(origin, stop ? [stop] : [], dest, prefer);
+  }, [origin, dest, stop, prefer, runPlan]);
+  const stepTime = useCallback((deltaMin) => {
+    const base = targetTimeRef.current || roundUpTime(30);
+    applyTime(timeModeRef.current === 'now' ? 'depart' : timeModeRef.current, new Date(base.getTime() + deltaMin * 60000));
+  }, [applyTime]);
+  const setDay = useCallback((tomorrow) => {
+    const base = targetTimeRef.current || roundUpTime(30);
+    const n = new Date();
+    const t = new Date(base);
+    t.setFullYear(n.getFullYear(), n.getMonth(), n.getDate() + (tomorrow ? 1 : 0));
+    applyTime(timeModeRef.current === 'now' ? 'depart' : timeModeRef.current, t);
+  }, [applyTime]);
+  // Typical-availability caption for a chosen station at the scheduled hour.
   const resolvePlace = async (place) => {
     if (place.current) { const loc = await getLocation(); return { ...CURRENT(), lat: loc.lat, lon: loc.lon }; }
     if (place.placeId) {
@@ -268,6 +327,12 @@ export default function TripScreen({ stations, onStartNav }) {
     const originName = origin?.current ? 'My Location' : origin?.name;
     return (
       <View style={styles.flex}>
+        {origin && dest && (
+          <TouchableOpacity style={styles.backRow} onPress={() => { setPhase('results'); setQuery(''); setSugs([]); }} activeOpacity={0.7}>
+            <Icon name="back" size={18} color={c.primary} />
+            <Text style={styles.backTxt}>Back to trip</Text>
+          </TouchableOpacity>
+        )}
         {/* From / To editor */}
         <View style={styles.odCard}>
           <TouchableOpacity style={[styles.odRow, editing === 'from' && styles.odRowActive]} onPress={() => setEditing('from')} activeOpacity={0.7}>
@@ -397,6 +462,32 @@ export default function TripScreen({ stations, onStartNav }) {
         )}
       </View>
 
+      {/* When to leave / arrive */}
+      <View style={styles.prefRow}>
+        {[{ k: 'now', label: 'Leave now' }, { k: 'depart', label: 'Depart at' }, { k: 'arrive', label: 'Arrive by' }].map((o) => (
+          <TouchableOpacity key={o.k} style={[styles.pref, timeMode === o.k && styles.prefOn]} onPress={() => applyTime(o.k, o.k === 'now' ? null : (targetTime || roundUpTime(30)))} activeOpacity={0.85}>
+            <Text style={[styles.prefTxt, timeMode === o.k && styles.prefTxtOn]}>{o.label}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+      {timeMode !== 'now' && (
+        <View style={styles.timeRow}>
+          <View style={styles.dayToggle}>
+            <TouchableOpacity style={[styles.dayBtn, !isTomorrow && styles.dayBtnOn]} onPress={() => setDay(false)} activeOpacity={0.85}>
+              <Text style={[styles.dayTxt, !isTomorrow && styles.dayTxtOn]}>Today</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.dayBtn, isTomorrow && styles.dayBtnOn]} onPress={() => setDay(true)} activeOpacity={0.85}>
+              <Text style={[styles.dayTxt, isTomorrow && styles.dayTxtOn]}>Tomorrow</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.stepper}>
+            <TouchableOpacity onPress={() => stepTime(-15)} hitSlop={8} style={styles.stepBtn} activeOpacity={0.6}><Icon name="back" size={16} color={c.primary} /></TouchableOpacity>
+            <Text style={styles.stepTime}>{targetTime ? formatClock(targetTime) : '—'}</Text>
+            <TouchableOpacity onPress={() => stepTime(15)} hitSlop={8} style={styles.stepBtn} activeOpacity={0.6}><Icon name="forward" size={16} color={c.primary} /></TouchableOpacity>
+          </View>
+        </View>
+      )}
+
       <View style={styles.prefRow}>
         {[{ k: 'any', label: 'Any bike' }, { k: 'classic', label: 'Classic' }, { k: 'ebike', label: 'E-bike' }].map((o) => (
           <TouchableOpacity key={o.k} style={[styles.pref, prefer === o.k && styles.prefOn]} onPress={() => changePrefer(o.k)} activeOpacity={0.85}>
@@ -410,19 +501,29 @@ export default function TripScreen({ stations, onStartNav }) {
 
       {markers.length > 0 && <View style={{ marginTop: 14 }}><RouteMap coords={route?.coords} markers={markers} ink={c.nav} paper="#fff" /></View>}
 
-      {/* Recommended route (single or multi-stop) */}
+      {/* Recommended route — with leave-by / depart time when planning ahead */}
       {current && (
         <View style={styles.bestCard}>
           <View style={styles.bestTop}>
             <View style={styles.flex}>
-              <Text style={styles.bestMin}>{fmtMin(current.totalSec)}</Text>
-              <Text style={styles.bestSub}>
-                {arrivalFor(current)} arrival · {fmtMiles(current.distanceM || 0)}{current.kind === 'multi' && points ? ` · ${points.length - 2} stop${points.length - 2 > 1 ? 's' : ''}` : ''}
-              </Text>
-              {current.kind === 'single' && (
-                <Text style={[styles.bikeTag, { color: current.bikeType === 'ebike' ? c.ebike : c.classic }]}>
-                  {current.bikeType === 'ebike' ? 'e-bike' : 'classic'}
-                </Text>
+              {sched ? (
+                <>
+                  <Text style={styles.bestSchedLabel}>{sched.mode === 'arrive' ? 'Leave by' : 'Depart'}</Text>
+                  <Text style={styles.bestMin}>{formatClock(sched.mode === 'arrive' ? sched.leaveBy : sched.depart)}</Text>
+                  <Text style={styles.bestSub}>{formatClock(sched.arrive)} arrival · {fmtMin(current.totalSec)} · {fmtMiles(current.distanceM || 0)}</Text>
+                </>
+              ) : (
+                <>
+                  <Text style={styles.bestMin}>{fmtMin(current.totalSec)}</Text>
+                  <Text style={styles.bestSub}>
+                    {arrivalFor(current)} arrival · {fmtMiles(current.distanceM || 0)}{current.kind === 'multi' && points ? ` · ${points.length - 2} stop${points.length - 2 > 1 ? 's' : ''}` : ''}
+                  </Text>
+                  {current.kind === 'single' && (
+                    <Text style={[styles.bikeTag, { color: current.bikeType === 'ebike' ? c.ebike : c.classic }]}>
+                      {current.bikeType === 'ebike' ? 'e-bike' : 'classic'}
+                    </Text>
+                  )}
+                </>
               )}
             </View>
             <TouchableOpacity style={styles.goBtn} onPress={go} activeOpacity={0.9}>
@@ -510,6 +611,8 @@ function makeStyles(c) {
     odRowActive: { backgroundColor: c.surfaceAlt },
     odTxt: { flex: 1, fontSize: 15, color: c.text, fontWeight: '600' },
     odDivider: { height: 1, backgroundColor: c.hairline, marginLeft: 44 },
+    backRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 2, alignSelf: 'flex-start' },
+    backTxt: { fontSize: 15, fontWeight: '600', color: c.primary },
     numSq: { minWidth: 22, height: 22, paddingHorizontal: 4, borderRadius: 6, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
     numTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
     addStopRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11 },
@@ -531,6 +634,25 @@ function makeStyles(c) {
     rowSub: { fontSize: 12, color: c.textMute, fontWeight: '400', marginTop: 1 },
 
     prefRow: { flexDirection: 'row', gap: 6, marginTop: 4, marginHorizontal: 16, backgroundColor: c.surfaceAlt, borderRadius: radius.md, padding: 3 },
+    timeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8, marginHorizontal: 16 },
+    dayToggle: { flexDirection: 'row', backgroundColor: c.surfaceAlt, borderRadius: radius.md, padding: 3, gap: 3 },
+    dayBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.sm },
+    dayBtnOn: { backgroundColor: c.elevated, ...shadow(c).card },
+    dayTxt: { fontSize: 13, fontWeight: '600', color: c.textMute },
+    dayTxtOn: { color: c.text },
+    stepper: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: c.surfaceAlt, borderRadius: radius.md, paddingHorizontal: 6, paddingVertical: 7 },
+    stepBtn: { paddingHorizontal: 10, paddingVertical: 2 },
+    stepTime: { fontSize: 15, fontWeight: '700', color: c.text, fontVariant: ['tabular-nums'] },
+    bestSchedLabel: { fontSize: 13, fontWeight: '600', color: c.textMute },
+    calloutCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: c.surfaceAlt, borderRadius: radius.md, padding: 11, marginBottom: 10 },
+    calloutTxt: { flex: 1, fontSize: 12.5, lineHeight: 18, color: c.text },
+    warnCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: c.lowBg, borderRadius: radius.md, padding: 11, marginBottom: 10 },
+    warnTxt: { fontSize: 12.5, lineHeight: 18, color: c.text, fontWeight: '500' },
+    warnOpts: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+    warnOpt: { borderWidth: 1, borderColor: c.border, borderRadius: radius.sm, paddingHorizontal: 10, paddingVertical: 7, backgroundColor: c.elevated },
+    warnOptTxt: { fontSize: 12.5, fontWeight: '600', color: c.primary },
+    predPill: { flexDirection: 'row', alignItems: 'center', gap: 5, alignSelf: 'flex-start', marginTop: 8, backgroundColor: c.surfaceAlt, borderRadius: radius.pill, paddingHorizontal: 9, paddingVertical: 4 },
+    predPillTxt: { fontSize: 11.5, fontWeight: '600', color: c.primary },
     pref: { flex: 1, paddingVertical: 8, borderRadius: radius.sm, alignItems: 'center' },
     prefOn: { backgroundColor: c.elevated, ...shadow(c).card },
     prefTxt: { fontSize: 13, fontWeight: '600', color: c.textMute },
