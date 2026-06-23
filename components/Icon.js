@@ -25,6 +25,7 @@ const MAP = {
   volumeOn: { sf: 'speaker.wave.2.fill', ion: 'volume-high' },
   volumeOff: { sf: 'speaker.slash.fill', ion: 'volume-mute' },
   star: { sf: 'star.fill', ion: 'star' },
+  swap: { sf: 'arrow.left.arrow.right', ion: 'swap-horizontal' },
   warning: { sf: 'exclamationmark.triangle.fill', ion: 'warning' },
   // maneuvers
   straight: { sf: 'arrow.up', ion: 'arrow-up' },

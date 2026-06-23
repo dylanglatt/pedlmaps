@@ -1,21 +1,35 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, StatusBar,
+  View, Text, TouchableOpacity, StyleSheet, StatusBar, Alert, Platform,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as SplashScreen from 'expo-splash-screen';
 
 import StationMap from './components/StationMap';
 import StationList from './components/StationList';
+import SavedPlaceCard from './components/SavedPlaceCard';
 import TripScreen from './components/TripScreen';
 import BottomSheet from './components/BottomSheet';
 import NavScreen from './components/NavScreen';
 import Icon from './components/Icon';
 import { fetchStations, nearest } from './lib/gbfs';
 import { getLocation, DEFAULT_CENTER } from './lib/location';
-import { loadSaved, saveSaved } from './lib/storage';
+import { loadPlaces, addPlace, removePlace, setFlipMode, makePlace, migrateLegacy } from './lib/savedPlaces';
+import { loadUnits, saveUnits } from './lib/storage';
 import { formatAge } from './lib/geo';
 import { useTheme, radius, shadow } from './lib/theme';
+
+// Name a custom place. Alert.prompt is iOS-only; elsewhere we fall back to the
+// station name (the saved-places edit flow will cover renaming later).
+function promptNickname(defaultName, cb) {
+  if (Platform.OS === 'ios' && Alert.prompt) {
+    Alert.prompt('Name this place', null,
+      (text) => cb((text || '').trim() || defaultName),
+      'plain-text', defaultName);
+  } else {
+    cb(defaultName);
+  }
+}
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 const REFRESH_MS = 45000;
@@ -36,8 +50,9 @@ function AppInner() {
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [mode, setMode] = useState('bike');
   const [bikeType, setBikeType] = useState('both');
+  const [units, setUnits] = useState('imperial');
   const [selectedId, setSelectedId] = useState(null);
-  const [saved, setSaved] = useState({ homeId: null, workId: null });
+  const [places, setPlaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [updatedAt, setUpdatedAt] = useState(null);
@@ -45,6 +60,7 @@ function AppInner() {
   const [searching, setSearching] = useState(false);
   const [navTrip, setNavTrip] = useState(null);
   const timer = useRef(null);
+  const migrated = useRef(false);
 
   const refresh = useCallback(async () => {
     try {
@@ -56,24 +72,52 @@ function AppInner() {
 
   useEffect(() => {
     (async () => {
-      const [loc, sv] = await Promise.all([getLocation(), loadSaved()]);
-      setCenter(loc); setSaved(sv); await refresh();
+      const [loc, pl, un] = await Promise.all([getLocation(), loadPlaces(), loadUnits()]);
+      setCenter(loc); setPlaces(pl); setUnits(un); await refresh();
       SplashScreen.hideAsync().catch(() => {});
     })();
     timer.current = setInterval(refresh, REFRESH_MS);
     return () => clearInterval(timer.current);
   }, [refresh]);
 
+  // Once stations arrive, run the one-time migration from the old home/work model.
+  useEffect(() => {
+    if (migrated.current || !all.length) return;
+    migrated.current = true;
+    (async () => { const m = await migrateLegacy(all); if (m) setPlaces(m); })();
+  }, [all]);
+
   const stations = useMemo(() => nearest(all, center.lat, center.lon, 75), [all, center]);
 
-  const onToggleSave = useCallback((which, id) => {
-    setSaved((prev) => {
-      const key = which === 'home' ? 'homeId' : 'workId';
-      const next = { ...prev, [key]: prev[key] === id ? null : id };
-      saveSaved(next);
-      return next;
-    });
+  const reloadPlaces = useCallback(async () => { setPlaces(await loadPlaces()); }, []);
+
+  const changeUnits = useCallback((u) => { setUnits(u); saveUnits(u); }, []);
+
+  // Save/unsave a place from a station row. Home/Work are single; custom is named.
+  const onToggleSave = useCallback(async (which, station) => {
+    const existing = places.find((p) => p.type === which && p.stationId === station.id);
+    if (existing) { await removePlace(existing.id); return reloadPlaces(); }
+    const base = { lat: station.lat, lon: station.lon, stationId: station.id };
+    if (which === 'custom') {
+      promptNickname(station.name, async (nickname) => {
+        await addPlace(makePlace({ ...base, type: 'custom', nickname }));
+        reloadPlaces();
+      });
+      return;
+    }
+    await addPlace(makePlace({ ...base, type: which, nickname: which === 'home' ? 'Home' : 'Work' }));
+    reloadPlaces();
+  }, [places, reloadPlaces]);
+
+  // Flip a place between bikes/docks (optimistic, then persisted).
+  const onFlipPlace = useCallback(async (place, newMode) => {
+    setPlaces((prev) => prev.map((p) => (p.id === place.id ? { ...p, flipMode: newMode } : p)));
+    await setFlipMode(place.id, newMode);
   }, []);
+
+  const onRemovePlace = useCallback(async (place) => {
+    await removePlace(place.id); reloadPlaces();
+  }, [reloadPlaces]);
 
   const openSearch = useCallback(() => { setSearching(true); setSheetIndex(2); }, []);
   const closeSearch = useCallback(() => { setSearching(false); setSheetIndex(1); }, []);
@@ -93,9 +137,18 @@ function AppInner() {
       </View>
     ) : (
       <View style={styles.browseHead}>
-        <View style={styles.statusLine}>
-          <View style={[styles.dot, { backgroundColor: statusColor }]} />
-          <Text style={styles.statusTxt} numberOfLines={1}>{statusText}</Text>
+        <View style={styles.statusRow}>
+          <View style={styles.statusLine}>
+            <View style={[styles.dot, { backgroundColor: statusColor }]} />
+            <Text style={styles.statusTxt} numberOfLines={1}>{statusText}</Text>
+          </View>
+          <View style={styles.unitToggle}>
+            {[{ k: 'imperial', label: 'mi' }, { k: 'metric', label: 'km' }].map((u) => (
+              <TouchableOpacity key={u.k} style={[styles.unitItem, units === u.k && styles.unitItemOn]} onPress={() => changeUnits(u.k)} activeOpacity={0.8}>
+                <Text style={[styles.unitTxt, units === u.k && styles.unitTxtOn]}>{u.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
         <TouchableOpacity style={styles.search} onPress={openSearch} activeOpacity={0.8}>
           <Icon name="search" size={18} color={c.textMute} />
@@ -109,15 +162,14 @@ function AppInner() {
           ))}
         </View>
         {mode === 'bike' && (
-          <View style={styles.typeRow}>
+          <View style={styles.seg}>
             {[
-              { k: 'both', label: 'Both', icon: null },
-              { k: 'classic', label: 'Classic', icon: 'bike' },
-              { k: 'electric', label: 'Electric', icon: 'bolt' },
+              { k: 'both', label: 'Both' },
+              { k: 'electric', label: 'Electric' },
+              { k: 'classic', label: 'Manual' },
             ].map((o) => (
-              <TouchableOpacity key={o.k} style={[styles.chip, bikeType === o.k && styles.chipOn]} onPress={() => setBikeType(o.k)} activeOpacity={0.8}>
-                {o.icon && <Icon name={o.icon} size={13} color={bikeType === o.k ? c.onPrimary : c.textMute} />}
-                <Text style={[styles.chipTxt, bikeType === o.k && styles.chipTxtOn]}>{o.label}</Text>
+              <TouchableOpacity key={o.k} style={[styles.segItem, bikeType === o.k && styles.segItemOn]} onPress={() => setBikeType(o.k)} activeOpacity={0.85}>
+                <Text style={[styles.segTxt, bikeType === o.k && styles.segTxtOn]}>{o.label}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -145,7 +197,8 @@ function AppInner() {
             stations={stations}
             mode={mode}
             bikeType={bikeType}
-            saved={saved}
+            units={units}
+            saved={places}
             onToggleSave={onToggleSave}
             onSelect={(s) => { setSelectedId(s.id); setCenter({ lat: s.lat, lon: s.lon }); }}
           />
@@ -161,8 +214,14 @@ function makeStyles(c) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: c.bg },
     dot: { width: 7, height: 7, borderRadius: 4 },
-    statusLine: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 2 },
+    statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    statusLine: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 2, flexShrink: 1 },
     statusTxt: { fontSize: 12, color: c.textMute, fontWeight: '500' },
+    unitToggle: { flexDirection: 'row', backgroundColor: c.surfaceAlt, borderRadius: radius.pill, padding: 2, marginLeft: 8 },
+    unitItem: { paddingVertical: 3, paddingHorizontal: 11, borderRadius: radius.pill },
+    unitItemOn: { backgroundColor: c.elevated, ...shadow(c).card },
+    unitTxt: { fontSize: 12, color: c.textMute, fontWeight: '600' },
+    unitTxtOn: { color: c.text },
 
     browseHead: { paddingBottom: 10, gap: 10 },
     search: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surface, borderRadius: radius.pill, paddingVertical: 13, paddingHorizontal: 16 },
@@ -172,12 +231,6 @@ function makeStyles(c) {
     segItemOn: { backgroundColor: c.elevated, ...shadow(c).card },
     segTxt: { fontSize: 14, color: c.textMute, fontWeight: '600' },
     segTxtOn: { color: c.text },
-
-    typeRow: { flexDirection: 'row', gap: 8 },
-    chip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 7, paddingHorizontal: 14, borderRadius: radius.pill, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
-    chipOn: { backgroundColor: c.primary, borderColor: c.primary },
-    chipTxt: { fontSize: 13, fontWeight: '600', color: c.textMute },
-    chipTxtOn: { color: c.onPrimary },
 
     planHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10 },
     planTitle: { fontWeight: '800', fontSize: 18, color: c.text },
