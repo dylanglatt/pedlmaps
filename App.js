@@ -7,6 +7,7 @@ import * as SplashScreen from 'expo-splash-screen';
 
 import StationMap from './components/StationMap';
 import StationList from './components/StationList';
+import StationSheet from './components/StationSheet';
 import SavedPlaceCard from './components/SavedPlaceCard';
 import TripScreen from './components/TripScreen';
 import BottomSheet from './components/BottomSheet';
@@ -52,6 +53,7 @@ function AppInner() {
   const [bikeType, setBikeType] = useState('both');
   const [units, setUnits] = useState('imperial');
   const [selectedId, setSelectedId] = useState(null);
+  const [chartId, setChartId] = useState(null);
   const [places, setPlaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -88,6 +90,7 @@ function AppInner() {
   }, [all]);
 
   const stations = useMemo(() => nearest(all, center.lat, center.lon, 75), [all, center]);
+  const chartStation = useMemo(() => all.find((s) => s.id === chartId) || null, [all, chartId]);
 
   const reloadPlaces = useCallback(async () => { setPlaces(await loadPlaces()); }, []);
 
@@ -181,7 +184,7 @@ function AppInner() {
     <View style={styles.root}>
       <StatusBar barStyle={c.scheme === 'dark' ? 'light-content' : 'dark-content'} />
 
-      <StationMap stations={all} center={center} mode={mode} bikeType={bikeType} selectedId={selectedId} onSelect={(s) => setSelectedId(s.id)} />
+      <StationMap stations={all} center={center} mode={mode} bikeType={bikeType} selectedId={selectedId} onSelect={(s) => { setSelectedId(s.id); setChartId(s.id); }} />
 
 
       <BottomSheet index={sheetIndex} onIndexChange={setSheetIndex} renderHeader={Header} bottomInset={insets.bottom}>
@@ -198,12 +201,13 @@ function AppInner() {
             mode={mode}
             bikeType={bikeType}
             units={units}
-            saved={places}
-            onToggleSave={onToggleSave}
+            onOpenChart={(s) => setChartId(s.id)}
             onSelect={(s) => { setSelectedId(s.id); setCenter({ lat: s.lat, lon: s.lon }); }}
           />
         )}
       </BottomSheet>
+
+      {chartStation && <StationSheet station={chartStation} initialMode={mode} onClose={() => setChartId(null)} />}
 
       {navTrip && <NavScreen trip={navTrip} onEnd={() => setNavTrip(null)} />}
     </View>

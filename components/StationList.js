@@ -12,7 +12,7 @@ const tap = () => { if (Haptics && Platform.OS !== 'web') Haptics.selectionAsync
 
 const BADGE_LABEL = { dock: 'docks', electric: 'e-bikes', classic: 'manual', both: 'bikes' };
 
-export default function StationList({ stations, mode, bikeType = 'both', units = 'imperial', onSelect, saved, onToggleSave, scroll = true, header = null }) {
+export default function StationList({ stations, mode, bikeType = 'both', units = 'imperial', onSelect, onOpenChart, scroll = true, header = null }) {
   const c = useTheme();
   const styles = useMemo(() => makeStyles(c), [c]);
 
@@ -21,9 +21,6 @@ export default function StationList({ stations, mode, bikeType = 'both', units =
     const lc = levelColor(c, level);
     const count = countFor(s, mode, bikeType);
     const badgeLabel = mode === 'dock' ? 'docks' : BADGE_LABEL[bikeType];
-    const places = Array.isArray(saved) ? saved : [];
-    const isHome = places.some((p) => p.type === 'home' && p.stationId === s.id);
-    const isWork = places.some((p) => p.type === 'work' && p.stationId === s.id);
     return (
       <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => onSelect && onSelect(s)}>
         <View style={[styles.badge, { backgroundColor: lc.bg }]}>
@@ -34,8 +31,6 @@ export default function StationList({ stations, mode, bikeType = 'both', units =
         <View style={styles.body}>
           <View style={styles.nameRow}>
             <Text style={styles.name} numberOfLines={1}>{s.name}</Text>
-            {isHome && <Icon name="home" size={12} color={c.primary} style={styles.nameIcon} />}
-            {isWork && <Icon name="work" size={12} color={c.primary} style={styles.nameIcon} />}
           </View>
           <OccupancyBar classic={s.classic} ebikes={s.ebikes} docks={s.docks} c={c} />
           <Text style={styles.meta} numberOfLines={1}>
@@ -55,15 +50,10 @@ export default function StationList({ stations, mode, bikeType = 'both', units =
           </View>
         </View>
 
-        {onToggleSave && (
-          <View style={styles.saveCol}>
-            <TouchableOpacity onPress={() => { tap(); onToggleSave('home', s); }} style={[styles.saveBtn, isHome && styles.saveBtnOn]} activeOpacity={0.7}>
-              <Icon name="home" size={16} color={isHome ? c.onPrimary : c.textMute} />
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => { tap(); onToggleSave('work', s); }} style={[styles.saveBtn, isWork && styles.saveBtnOn]} activeOpacity={0.7}>
-              <Icon name="work" size={16} color={isWork ? c.onPrimary : c.textMute} />
-            </TouchableOpacity>
-          </View>
+        {onOpenChart && (
+          <TouchableOpacity onPress={() => { tap(); onOpenChart(s); }} style={styles.chartBtn} activeOpacity={0.7} hitSlop={6}>
+            <Icon name="chart" size={18} color={c.textMute} />
+          </TouchableOpacity>
         )}
       </TouchableOpacity>
     );
@@ -97,9 +87,7 @@ function makeStyles(c) {
     invItem: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
     invNum: { fontSize: 13, fontWeight: '700', fontVariant: ['tabular-nums'] },
     invLabel: { fontSize: 11.5, color: c.textFaint, fontWeight: '500' },
-    saveCol: { flexDirection: 'row', gap: 4 },
-    saveBtn: { width: 34, height: 34, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
-    saveBtnOn: { backgroundColor: c.primary, borderColor: c.primary },
+    chartBtn: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
     sep: { height: 1, backgroundColor: c.hairline, marginLeft: 78 },
   });
 }

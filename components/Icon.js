@@ -26,6 +26,7 @@ const MAP = {
   volumeOff: { sf: 'speaker.slash.fill', ion: 'volume-mute' },
   star: { sf: 'star.fill', ion: 'star' },
   swap: { sf: 'arrow.left.arrow.right', ion: 'swap-horizontal' },
+  chart: { sf: 'chart.bar.fill', ion: 'stats-chart' },
   warning: { sf: 'exclamationmark.triangle.fill', ion: 'warning' },
   // maneuvers
   straight: { sf: 'arrow.up', ion: 'arrow-up' },
