@@ -1,9 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, TouchableOpacity, Modal, StyleSheet, Pressable } from 'react-native';
 import Icon from './Icon';
-import { useTheme, levelColor, radius, shadow } from '../lib/theme';
+import { useTheme, radius, shadow } from '../lib/theme';
 import {
-  fullnessPattern, fullnessLevel, patternCaption, hasPattern, isLowConfidence, DAY_LABELS,
+  splitPattern, docksPattern, patternCaption, isLowConfidence,
 } from '../lib/predictions';
 
 const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -26,9 +26,11 @@ export default function StationSheet({ station, initialMode = 'bike', onClose })
 
   if (!station) return null;
   const sn = station.shortName;
-  const pattern = fullnessPattern(sn, day, mode);
+  const split = splitPattern(sn, day);                       // { e, c } electric/manual fullness, or null
+  const docks = mode === 'dock' ? docksPattern(sn, day) : null;
+  const hasData = !!split;
   const isToday = day === today;
-  const noun = mode === 'dock' ? 'open docks' : 'bikes';
+  const valueAt = (h) => (mode === 'dock' ? (docks ? docks[h] : 0) : split ? split.e[h] + split.c[h] : 0);
 
   return (
     <Modal visible animationType="fade" transparent onRequestClose={onClose}>
@@ -67,27 +69,31 @@ export default function StationSheet({ station, initialMode = 'bike', onClose })
             ))}
           </View>
 
-          {pattern ? (
+          {hasData ? (
             <>
               <Text style={styles.caption}>
                 <Text style={styles.captionHour}>{hourLabel(hour)}</Text>
-                <Text style={styles.captionRest}>  ·  {patternCaption(pattern, hour, mode)}</Text>
+                <Text style={styles.captionRest}>  ·  {patternCaption(valueAt(hour), mode)}</Text>
               </Text>
 
-              {/* Bars */}
+              {/* Bars: bikes mode stacks electric + manual; docks mode is a single series */}
               <View style={styles.chart}>
-                {pattern.map((v, h) => {
-                  const lvl = fullnessLevel(v);
-                  const bg = levelColor(c, lvl).fg;
+                {Array.from({ length: 24 }).map((_, h) => {
+                  const total = mode === 'dock' ? docks[h] : split.e[h] + split.c[h];
                   const isNow = isToday && h === hourNow;
                   const isSel = h === hour;
                   return (
                     <TouchableOpacity key={h} style={styles.barCol} activeOpacity={0.6} onPress={() => setHour(h)}>
-                      <View style={[
-                        styles.bar,
-                        { height: `${Math.max(4, v)}%`, backgroundColor: bg, opacity: isSel ? 1 : 0.55 },
-                        isNow && { borderWidth: 1.5, borderColor: c.text },
-                      ]} />
+                      <View style={[styles.barInner, { height: `${Math.max(3, total)}%`, opacity: isSel ? 1 : 0.5 }, isNow && styles.nowBar]}>
+                        {mode === 'dock' ? (
+                          <View style={{ flex: 1, backgroundColor: c.primary }} />
+                        ) : (
+                          <>
+                            <View style={{ flex: Math.max(0.0001, split.c[h]), backgroundColor: c.classic }} />
+                            <View style={{ flex: Math.max(0.0001, split.e[h]), backgroundColor: c.ebike }} />
+                          </>
+                        )}
+                      </View>
                     </TouchableOpacity>
                   );
                 })}
@@ -98,11 +104,12 @@ export default function StationSheet({ station, initialMode = 'bike', onClose })
                 ))}
               </View>
 
-              <View style={styles.legend}>
-                <Legend c={c} color={levelColor(c, 'good').fg} label="plenty" />
-                <Legend c={c} color={levelColor(c, 'low').fg} label="low" />
-                <Legend c={c} color={levelColor(c, 'none').fg} label="often empty" />
-              </View>
+              {mode === 'bike' && (
+                <View style={styles.legend}>
+                  <Legend c={c} color={c.ebike} label="electric" />
+                  <Legend c={c} color={c.classic} label="manual" />
+                </View>
+              )}
 
               {isLowConfidence(sn) && (
                 <Text style={styles.note}>Based on limited history — treat as a rough guide.</Text>
@@ -167,7 +174,8 @@ function makeStyles(c) {
 
     chart: { flexDirection: 'row', alignItems: 'flex-end', height: 120, gap: 2 },
     barCol: { flex: 1, height: '100%', justifyContent: 'flex-end' },
-    bar: { width: '100%', borderRadius: 3, minHeight: 4 },
+    barInner: { width: '100%', borderTopLeftRadius: 3, borderTopRightRadius: 3, overflow: 'hidden', minHeight: 4 },
+    nowBar: { borderWidth: 1.5, borderColor: c.text },
     ticks: { height: 16, marginTop: 4, position: 'relative' },
     tick: { position: 'absolute', fontSize: 10.5, color: c.textFaint, fontWeight: '500' },
 
