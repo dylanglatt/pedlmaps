@@ -25,6 +25,8 @@ const MAP = {
   dot: { sf: 'circle.fill', ion: 'ellipse' },
   flag: { sf: 'flag.fill', ion: 'flag' },
   chat: { sf: 'bubble.left.fill', ion: 'chatbubble-ellipses' },
+  bug: { sf: 'ladybug.fill', ion: 'bug' },
+  idea: { sf: 'lightbulb.fill', ion: 'bulb' },
   volumeOn: { sf: 'speaker.wave.2.fill', ion: 'volume-high' },
   volumeOff: { sf: 'speaker.slash.fill', ion: 'volume-mute' },
   star: { sf: 'star.fill', ion: 'star' },
