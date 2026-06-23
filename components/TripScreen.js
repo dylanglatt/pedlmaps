@@ -260,37 +260,39 @@ export default function TripScreen({ stations, onStartNav }) {
 
       {route && <View style={{ marginTop: 14 }}><RouteMap coords={route.coords} markers={markers} /></View>}
 
-      {current && (
-        <>
-          {/* Selected route card with GO */}
-          <View style={styles.bestCard}>
+      {/* Routes in stable order — tap a collapsed one to expand it in place */}
+      {allPlans.map((p, i) => {
+        if (i !== selIdx) {
+          return (
+            <TouchableOpacity key={i} style={styles.altCard} onPress={() => selectPlan(i)} activeOpacity={0.7}>
+              <Text style={styles.altMin}>{fmtMin(p.totalSec)}</Text>
+              <Text style={styles.altTxt} numberOfLines={1}>via {p.originStation.name} → {p.destStation.name}</Text>
+              <Icon name="forward" size={16} color={c.textFaint} />
+            </TouchableOpacity>
+          );
+        }
+        const bikeColor = p.bikeType === 'ebike' ? c.ebike : c.classic;
+        const bikeWord = p.bikeType === 'ebike' ? 'e-bike' : 'classic';
+        return (
+          <View key={i} style={styles.bestCard}>
             <View style={styles.bestTop}>
               <View style={styles.flex}>
-                <Text style={styles.bestMin}>{fmtMin(current.totalSec)}</Text>
-                <Text style={styles.bestSub}>{arrivalFor(current)} arrival · {fmtMiles(current.distanceM || 0)}</Text>
-                <Text style={styles.bestType}>on {current.bikeType === 'ebike' ? 'an e-bike' : 'a classic bike'}</Text>
+                <Text style={styles.bestMin}>{fmtMin(p.totalSec)}</Text>
+                <Text style={styles.bestSub}>{arrivalFor(p)} arrival · {fmtMiles(p.distanceM || 0)}</Text>
+                <Text style={[styles.bikeTag, { color: bikeColor }]}>{bikeWord}</Text>
               </View>
               <TouchableOpacity style={styles.goBtn} onPress={go} activeOpacity={0.9}>
                 <Text style={styles.goTxt}>GO</Text>
               </TouchableOpacity>
             </View>
             <View style={styles.divider} />
-            <Step icon="walk" time={fmtMin(current.walkToBikeSec)} title={`Walk to ${current.originStation.name}`} sub={`${current.originStation.classic} regular · ${current.originStation.ebikes} electric`} styles={styles} c={c} />
-            <Step icon="bike" time={fmtMin(current.rideSec)} title="Ride" sub={current.bikeType === 'ebike' ? 'on an e-bike' : 'on a classic bike'} styles={styles} c={c} />
-            <Step icon="dock" title={`Dock at ${current.destStation.name}`} sub={`${current.destStation.docks} open docks`} styles={styles} c={c} />
-            <Step icon="walk" time={fmtMin(current.walkToDestSec)} title={`Walk to ${dest?.name || 'your destination'}`} last styles={styles} c={c} />
+            <Step icon="walk" time={fmtMin(p.walkToBikeSec)} title={`Walk to ${p.originStation.name}`} sub={`${p.originStation.classic} classic · ${p.originStation.ebikes} e-bikes`} styles={styles} c={c} />
+            <Step icon="bike" time={fmtMin(p.rideSec)} title="Ride" sub={bikeWord} subColor={bikeColor} styles={styles} c={c} />
+            <Step icon="dock" title={`Dock at ${p.destStation.name}`} sub={`${p.destStation.docks} open docks`} styles={styles} c={c} />
+            <Step icon="walk" time={fmtMin(p.walkToDestSec)} title={`Walk to ${dest?.name || 'your destination'}`} last styles={styles} c={c} />
           </View>
-
-          {/* Other routes — tap to select */}
-          {allPlans.map((p, i) => i === selIdx ? null : (
-            <TouchableOpacity key={i} style={styles.altCard} onPress={() => selectPlan(i)} activeOpacity={0.7}>
-              <Text style={styles.altMin}>{fmtMin(p.totalSec)}</Text>
-              <Text style={styles.altTxt} numberOfLines={1}>via {p.originStation.name} → {p.destStation.name}</Text>
-              <Icon name="forward" size={16} color={c.textFaint} />
-            </TouchableOpacity>
-          ))}
-        </>
-      )}
+        );
+      })}
     </ScrollView>
   );
 }
@@ -314,7 +316,7 @@ function Row({ icon, title, sub, onPress, onRemove, styles, c }) {
   );
 }
 
-function Step({ icon, time, title, sub, last, styles, c }) {
+function Step({ icon, time, title, sub, subColor, last, styles, c }) {
   return (
     <View style={styles.step}>
       <View style={styles.stepRail}>
@@ -326,7 +328,7 @@ function Step({ icon, time, title, sub, last, styles, c }) {
           <Text style={styles.stepTitle} numberOfLines={1}>{title}</Text>
           {!!time && <Text style={styles.stepTime}>{time}</Text>}
         </View>
-        {!!sub && <Text style={styles.stepSub}>{sub}</Text>}
+        {!!sub && <Text style={[styles.stepSub, subColor && { color: subColor, fontWeight: '600' }]}>{sub}</Text>}
       </View>
     </View>
   );
@@ -367,6 +369,7 @@ function makeStyles(c) {
     bestMin: { fontSize: 28, fontWeight: '800', color: c.text, fontVariant: ['tabular-nums'] },
     bestSub: { fontSize: 13, color: c.textMute, fontWeight: '500', marginTop: 2, fontVariant: ['tabular-nums'] },
     bestType: { fontSize: 12, color: c.textFaint, fontWeight: '400', marginTop: 1 },
+    bikeTag: { fontSize: 12.5, fontWeight: '600', marginTop: 2 },
     goBtn: { backgroundColor: c.good, width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', ...shadow(c).card },
     goTxt: { color: '#fff', fontSize: 18, fontWeight: '800' },
     divider: { height: 1, backgroundColor: c.hairline, marginVertical: 12 },
