@@ -81,6 +81,7 @@ export default function TripScreen({ stations, onStartNav }) {
   const [saving, setSaving] = useState(false);   // "pick a place to save" mode
   const [saveType, setSaveType] = useState('custom'); // home | work | custom
   const [showManager, setShowManager] = useState(false);
+  const [dragging, setDragging] = useState(false);    // disable result scroll while reordering stops
   const [origin, setOrigin] = useState(null);   // resolved {name,lat,lon,current?}
   const [dest, setDest] = useState(null);
   const [stop, setStop] = useState(null);        // single intermediate stop (cap 1)
@@ -383,7 +384,7 @@ export default function TripScreen({ stations, onStartNav }) {
   // ---- RESULTS ----
   const arrivalFor = (p) => formatClock(new Date(Date.now() + p.totalSec * 1000));
   return (
-    <ScrollView style={styles.flex} contentContainerStyle={{ paddingBottom: 28 }} keyboardShouldPersistTaps="handled">
+    <ScrollView style={styles.flex} contentContainerStyle={{ paddingBottom: 28 }} keyboardShouldPersistTaps="handled" scrollEnabled={!dragging}>
       {/* From / stops / To (tap to edit) */}
       <View style={styles.odCard}>
         <TouchableOpacity style={styles.odRow} onPress={() => editField('from')} activeOpacity={0.7}>
@@ -397,6 +398,8 @@ export default function TripScreen({ stations, onStartNav }) {
             top={{ name: stop.name, icon: 'pin', color: c.accent2, onPress: openStop, onRemove: removeStop }}
             bottom={{ name: dest?.name, icon: 'pin', color: c.danger, onPress: () => editField('to') }}
             onSwap={swapStopDest}
+            onDragStart={() => setDragging(true)}
+            onDragEnd={() => setDragging(false)}
             c={c}
             styles={styles}
           />
