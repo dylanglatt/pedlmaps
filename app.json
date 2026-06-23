@@ -20,8 +20,6 @@
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Keeps voice navigation running with the screen off.",
         "UIBackgroundModes": [
           "location",
-          "audio",
-          "location",
           "audio"
         ],
         "ITSAppUsesNonExemptEncryption": false
