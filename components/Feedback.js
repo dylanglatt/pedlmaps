@@ -159,7 +159,7 @@ export default function Feedback({ visible, screen, onClose }) {
                     ? <ActivityIndicator color="#fff" />
                     : <Text style={styles.sendTxt}>Send</Text>}
                 </TouchableOpacity>
-                <Text style={styles.foot}>pedl v{VERSION}</Text>
+                <Text style={styles.foot}>Pedl v{VERSION}</Text>
               </>
             )}
           </View>
