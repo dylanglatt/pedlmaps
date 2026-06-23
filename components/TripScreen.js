@@ -270,16 +270,16 @@ export default function TripScreen({ stations, onStartNav }) {
   let markers = [];
   if (multiPlan) {
     multiPlan.segments.forEach((seg) => {
-      markers.push({ lat: seg.originStation.lat, lon: seg.originStation.lon, title: `Pick up · ${seg.originStation.name}`, color: c.good });
-      markers.push({ lat: seg.destStation.lat, lon: seg.destStation.lon, title: `Dock · ${seg.destStation.name}`, color: c.danger });
+      markers.push({ lat: seg.originStation.lat, lon: seg.originStation.lon, title: `Pick up · ${seg.originStation.name}`, color: c.good, kind: 'pickup' });
+      markers.push({ lat: seg.destStation.lat, lon: seg.destStation.lon, title: `Dock · ${seg.destStation.name}`, color: c.danger, kind: 'dock' });
     });
-    multiPlan.points.slice(1, -1).forEach((pt, i) => markers.push({ lat: pt.lat, lon: pt.lon, title: pt.name || `Stop ${i + 1}`, color: c.accent2 }));
-    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: dest.name || 'Destination', color: c.primary });
+    multiPlan.points.slice(1, -1).forEach((pt, i) => markers.push({ lat: pt.lat, lon: pt.lon, title: pt.name || `Stop ${i + 1}`, color: c.accent2, kind: 'stop' }));
+    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: dest.name || 'Destination', color: c.primary, kind: 'dest' });
   } else if (current) {
     markers = [
-      { lat: current.originStation.lat, lon: current.originStation.lon, title: `Pick up · ${current.originStation.name}`, color: c.good },
-      { lat: current.destStation.lat, lon: current.destStation.lon, title: `Dock · ${current.destStation.name}`, color: c.danger },
-      ...(dest ? [{ lat: dest.lat, lon: dest.lon, title: dest.name || 'Destination', color: c.primary }] : []),
+      { lat: current.originStation.lat, lon: current.originStation.lon, title: `Pick up · ${current.originStation.name}`, color: c.good, kind: 'pickup' },
+      { lat: current.destStation.lat, lon: current.destStation.lon, title: `Dock · ${current.destStation.name}`, color: c.danger, kind: 'dock' },
+      ...(dest ? [{ lat: dest.lat, lon: dest.lon, title: dest.name || 'Destination', color: c.primary, kind: 'dest' }] : []),
     ];
   }
 

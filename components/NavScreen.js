@@ -105,17 +105,17 @@ export default function NavScreen({ trip, onEnd }) {
   const markers = [];
   if (plan.segments) {
     plan.segments.forEach((seg) => {
-      markers.push({ lat: seg.originStation.lat, lon: seg.originStation.lon, title: 'Pick up', color: c.good });
-      markers.push({ lat: seg.destStation.lat, lon: seg.destStation.lon, title: 'Dock', color: c.danger });
+      markers.push({ lat: seg.originStation.lat, lon: seg.originStation.lon, title: 'Pick up', color: c.good, kind: 'pickup' });
+      markers.push({ lat: seg.destStation.lat, lon: seg.destStation.lon, title: 'Dock', color: c.danger, kind: 'dock' });
     });
-    (plan.points || []).slice(1, -1).forEach((pt) => markers.push({ lat: pt.lat, lon: pt.lon, title: pt.name || 'Stop', color: c.accent2 }));
-    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.primary });
+    (plan.points || []).slice(1, -1).forEach((pt) => markers.push({ lat: pt.lat, lon: pt.lon, title: pt.name || 'Stop', color: c.accent2, kind: 'stop' }));
+    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.primary, kind: 'dest' });
   } else {
     markers.push(
-      { lat: plan.originStation.lat, lon: plan.originStation.lon, title: 'Pick up', color: c.good },
-      { lat: plan.destStation.lat, lon: plan.destStation.lon, title: 'Dock', color: c.danger },
+      { lat: plan.originStation.lat, lon: plan.originStation.lon, title: 'Pick up', color: c.good, kind: 'pickup' },
+      { lat: plan.destStation.lat, lon: plan.destStation.lon, title: 'Dock', color: c.danger, kind: 'dock' },
     );
-    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.primary });
+    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.primary, kind: 'dest' });
   }
   const distLabel = fmtDist(dist);
 

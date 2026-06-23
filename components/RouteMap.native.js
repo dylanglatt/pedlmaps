@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View, Text } from 'react-native';
 import MapView, { Polyline, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
 
 // Route polyline + markers. `fill` makes it full-bleed; `follow` recenters on a
@@ -40,9 +40,17 @@ export default function RouteMap({ coords, markers, fill, follow, overview, show
           <Polyline coordinates={pts} strokeColor="#5B53E6" strokeWidth={6} lineCap="round" lineJoin="round" />
         </>
       )}
-      {(markers || []).map((m, i) => (
-        <Marker key={i} coordinate={{ latitude: m.lat, longitude: m.lon }} title={m.title} pinColor={m.color} />
-      ))}
+      {(markers || []).map((m, i) =>
+        m.kind === 'dock' ? (
+          <Marker key={i} coordinate={{ latitude: m.lat, longitude: m.lon }} title={m.title} anchor={{ x: 0.5, y: 0.5 }}>
+            <View style={[styles.pMarker, { backgroundColor: m.color }]}>
+              <Text style={styles.pTxt}>P</Text>
+            </View>
+          </Marker>
+        ) : (
+          <Marker key={i} coordinate={{ latitude: m.lat, longitude: m.lon }} title={m.title} pinColor={m.color} />
+        )
+      )}
     </MapView>
   );
 }
@@ -60,4 +68,8 @@ function region(coords) {
   };
 }
 
-const styles = StyleSheet.create({ map: { width: '100%', height: 220, borderRadius: 12 } });
+const styles = StyleSheet.create({
+  map: { width: '100%', height: 220, borderRadius: 12 },
+  pMarker: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: '#fff' },
+  pTxt: { color: '#fff', fontSize: 13, fontWeight: '800', lineHeight: 16 },
+});
