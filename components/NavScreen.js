@@ -165,13 +165,19 @@ export default function NavScreen({ trip, onEnd }) {
 
           {expanded && (
             <View style={styles.expand}>
-              <View style={styles.optRow}>
-                <Icon name="star" size={18} color={c.primary} />
-                <View style={styles.flex}>
-                  <Text style={styles.optName} numberOfLines={1}>{dest?.name || dest?.label || 'Destination'}</Text>
-                  {!!dest?.address && <Text style={styles.optSub} numberOfLines={1}>{dest.address}</Text>}
-                </View>
-              </View>
+              {(plan.points ? plan.points.slice(1) : [dest]).filter(Boolean).map((pt, i, arr) => {
+                const isFinal = i === arr.length - 1;
+                return (
+                  <View key={i} style={styles.optRow}>
+                    <Icon name="pin" size={18} color={isFinal ? c.primary : c.accent2} />
+                    <View style={styles.flex}>
+                      <Text style={styles.optName} numberOfLines={1}>{pt?.name || (isFinal ? 'Destination' : 'Stop')}</Text>
+                      {!!pt?.address && <Text style={styles.optSub} numberOfLines={1}>{pt.address}</Text>}
+                    </View>
+                    <Text style={styles.optTag}>{isFinal ? 'Destination' : 'Stop'}</Text>
+                  </View>
+                );
+              })}
               <View style={styles.optRow}>
                 <Icon name={voiceOn ? 'volumeOn' : 'volumeOff'} size={18} color={c.textMute} />
                 <Text style={styles.optTxt}>Voice guidance</Text>
@@ -231,6 +237,7 @@ function makeStyles(c) {
     optTxt: { flex: 1, fontSize: 15, color: c.text, fontWeight: '600' },
     optName: { fontSize: 15, color: c.text, fontWeight: '600' },
     optSub: { fontSize: 12.5, color: c.textMute, fontWeight: '400', marginTop: 2 },
+    optTag: { fontSize: 11, color: c.textMute, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
     end: { backgroundColor: c.danger, borderRadius: radius.md, paddingVertical: 15, alignItems: 'center', marginTop: 4 },
     endTxt: { color: '#fff', fontSize: 17, fontWeight: '800' },
   });

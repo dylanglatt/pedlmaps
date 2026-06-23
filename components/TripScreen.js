@@ -6,6 +6,7 @@ import {
 import Icon from './Icon';
 import SavedPlacesRow from './SavedPlacesRow';
 import FavoritesManager from './FavoritesManager';
+import ReorderPair from './ReorderPair';
 import { directions, WALK, BIKE } from '../lib/routing';
 import { autocomplete, placeDetails } from '../lib/places';
 import { planTrip, planMultiTrip, fmtMin, fmtMiles } from '../lib/tripPlanner';
@@ -213,6 +214,14 @@ export default function TripScreen({ stations, onStartNav }) {
     if (origin && dest) runPlan(origin, [], dest, prefer);
   }, [origin, dest, prefer, runPlan]);
 
+  // Drag-to-swap: flip which of stop/destination you reach first.
+  const swapStopDest = useCallback(() => {
+    if (!stop || !dest) return;
+    const newStop = dest, newDest = stop;
+    setStop(newStop); setDest(newDest);
+    if (origin) runPlan(origin, [newStop], newDest, prefer);
+  }, [stop, dest, origin, prefer, runPlan]);
+
   const selectPlan = useCallback(async (idx) => {
     if (idx === selIdx) return;
     buzz();
@@ -382,26 +391,22 @@ export default function TripScreen({ stations, onStartNav }) {
           <Text style={styles.odTxt} numberOfLines={1}>{origin?.current ? 'My Location' : origin?.name}</Text>
           <Icon name="forward" size={16} color={c.textFaint} />
         </TouchableOpacity>
-        {stop && (
-          <>
-            <View style={styles.odDivider} />
-            <View style={styles.odRow}>
-              <Icon name="pin" size={18} color={c.accent2} />
-              <TouchableOpacity style={styles.flex} onPress={openStop} activeOpacity={0.7}>
-                <Text style={styles.odTxt} numberOfLines={1}>{stop.name}</Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={removeStop} hitSlop={8}><Icon name="close" size={16} color={c.textFaint} /></TouchableOpacity>
-            </View>
-          </>
-        )}
         <View style={styles.odDivider} />
-        <TouchableOpacity style={styles.odRow} onPress={() => editField('to')} activeOpacity={0.7}>
-          <Icon name="pin" size={20} color={c.danger} />
-          <Text style={styles.odTxt} numberOfLines={1}>{dest?.name}</Text>
-          <Icon name="forward" size={16} color={c.textFaint} />
-        </TouchableOpacity>
-        {!stop && (
+        {stop ? (
+          <ReorderPair
+            top={{ name: stop.name, icon: 'pin', color: c.accent2, onPress: openStop, onRemove: removeStop }}
+            bottom={{ name: dest?.name, icon: 'pin', color: c.danger, onPress: () => editField('to') }}
+            onSwap={swapStopDest}
+            c={c}
+            styles={styles}
+          />
+        ) : (
           <>
+            <TouchableOpacity style={styles.odRow} onPress={() => editField('to')} activeOpacity={0.7}>
+              <Icon name="pin" size={20} color={c.danger} />
+              <Text style={styles.odTxt} numberOfLines={1}>{dest?.name}</Text>
+              <Icon name="forward" size={16} color={c.textFaint} />
+            </TouchableOpacity>
             <View style={styles.odDivider} />
             <TouchableOpacity style={styles.addStopRow} onPress={openStop} activeOpacity={0.7}>
               <Icon name="add" size={18} color={c.primary} />
