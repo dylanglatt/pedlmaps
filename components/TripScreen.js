@@ -86,9 +86,8 @@ export default function TripScreen({ stations, onStartNav }) {
   const [dest, setDest] = useState(null);
   const [stop, setStop] = useState(null);        // single intermediate stop (cap 1)
   const [prefer, setPrefer] = useState('any');
-  const [plan, setPlan] = useState(null);        // single-trip { best, alternates }
-  const [multiPlan, setMultiPlan] = useState(null); // multi-stop { segments, totalSec, distanceM, points }
-  const [selIdx, setSelIdx] = useState(0);
+  const [plan, setPlan] = useState(null);        // current route: { kind:'single'|'multi', ... }
+  const [points, setPoints] = useState(null);    // [origin, ...stops, dest] for multi-stop nav
   const [route, setRoute] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -109,23 +108,22 @@ export default function TripScreen({ stations, onStartNav }) {
     }, 300);
   }, []);
 
-  const allPlans = plan ? [plan.best, ...plan.alternates] : [];
-  const current = allPlans[selIdx] || null;
+  const current = plan;
 
   const runPlan = useCallback(async (org, midsArr, d, pref) => {
-    setBusy(true); setError(null); setPlan(null); setMultiPlan(null); setRoute(null); setSelIdx(0);
+    setBusy(true); setError(null); setPlan(null); setPoints(null); setRoute(null);
     const clean = (midsArr || []).filter(Boolean);
     try {
       if (clean.length === 0) {
-        const result = await planTrip({ origin: org, dest: d, stations, prefer: pref });
-        setPlan(result);
-        try { setRoute(await buildRoute(org, result.best.originStation, result.best.destStation, d)); }
+        const { best } = await planTrip({ origin: org, dest: d, stations, prefer: pref });
+        setPlan({ ...best, kind: 'single' });
+        try { setRoute(await buildRoute(org, best.originStation, best.destStation, d)); }
         catch { setRoute(null); }
       } else {
-        const points = [org, ...clean, d];
-        const mt = await planMultiTrip({ points, stations, prefer: pref });
-        setMultiPlan({ ...mt, points });
-        try { setRoute(await buildMultiRoute(points, mt.segments)); }
+        const pts = [org, ...clean, d];
+        const mt = await planMultiTrip({ points: pts, stations, prefer: pref });
+        setPlan({ ...mt, kind: 'multi' }); setPoints(pts);
+        try { setRoute(await buildMultiRoute(pts, mt.segments)); }
         catch { setRoute(null); }
       }
     } catch (e) { setError(e.message || 'Planning failed'); }
@@ -223,38 +221,26 @@ export default function TripScreen({ stations, onStartNav }) {
     if (origin) runPlan(origin, [newStop], newDest, prefer);
   }, [stop, dest, origin, prefer, runPlan]);
 
-  const selectPlan = useCallback(async (idx) => {
-    if (idx === selIdx) return;
-    buzz();
-    setSelIdx(idx);
-    const p = allPlans[idx];
-    if (!p || !origin || !dest) return;
-    setBusy(true);
-    try { setRoute(await buildRoute(origin, p.originStation, p.destStation, dest)); }
-    catch { setRoute(null); }
-    finally { setBusy(false); }
-  }, [selIdx, allPlans, origin, dest]);
-
   const go = useCallback(async () => {
     buzz(Haptics?.ImpactFeedbackStyle?.Medium);
-    if (multiPlan) {
-      const segs = multiPlan.segments;
+    if (!current || !origin || !dest) return;
+    if (current.kind === 'multi') {
+      const segs = current.segments;
       const combined = {
-        totalSec: multiPlan.totalSec, distanceM: multiPlan.distanceM,
+        totalSec: current.totalSec, distanceM: current.distanceM,
         originStation: segs[0].originStation, destStation: segs[segs.length - 1].destStation,
-        segments: segs, points: multiPlan.points,
+        segments: segs, points,
       };
       let r = route;
       if (!r) {
         setBusy(true);
-        try { r = await buildMultiRoute(multiPlan.points, segs); }
+        try { r = await buildMultiRoute(points, segs); }
         catch (e) { setError(e.message || 'Could not start'); setBusy(false); return; }
         setBusy(false);
       }
       onStartNav && onStartNav({ plan: combined, route: r, dest });
       return;
     }
-    if (!current || !origin || !dest) return;
     let r = route;
     if (!r) {
       setBusy(true);
@@ -263,26 +249,18 @@ export default function TripScreen({ stations, onStartNav }) {
       setBusy(false);
     }
     onStartNav && onStartNav({ plan: current, route: r, dest });
-  }, [multiPlan, current, origin, dest, route, onStartNav]);
+  }, [current, origin, dest, route, points, onStartNav]);
 
   const onRemoveRecent = useCallback(async (r) => { setRecents(await removeRecent(r)); }, []);
   const onClearRecents = useCallback(async () => { setRecents(await clearRecents()); }, []);
 
-  let markers = [];
-  if (multiPlan) {
-    multiPlan.segments.forEach((seg) => {
-      markers.push({ lat: seg.originStation.lat, lon: seg.originStation.lon, title: `Pick up · ${seg.originStation.name}`, color: c.good, kind: 'pickup' });
-      markers.push({ lat: seg.destStation.lat, lon: seg.destStation.lon, title: `Dock · ${seg.destStation.name}`, color: c.danger, kind: 'dock' });
-    });
-    multiPlan.points.slice(1, -1).forEach((pt, i) => markers.push({ lat: pt.lat, lon: pt.lon, title: pt.name || `Stop ${i + 1}`, color: c.accent2, kind: 'stop' }));
-    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: dest.name || 'Destination', color: c.danger, kind: 'dest' });
-  } else if (current) {
-    markers = [
-      { lat: current.originStation.lat, lon: current.originStation.lon, title: `Pick up · ${current.originStation.name}`, color: c.good, kind: 'pickup' },
-      { lat: current.destStation.lat, lon: current.destStation.lon, title: `Dock · ${current.destStation.name}`, color: c.danger, kind: 'dock' },
-      ...(dest ? [{ lat: dest.lat, lon: dest.lon, title: dest.name || 'Destination', color: c.danger, kind: 'dest' }] : []),
-    ];
-  }
+  // Preview shows the PLACES only — origin dot → numbered stop → destination
+  // flag — plus a clean connector line. Bike pickup/dock stations are saved for
+  // live navigation (where you actually need them), keeping the preview legible.
+  const markers = [];
+  if (current && origin) markers.push({ lat: origin.lat, lon: origin.lon, title: origin.current ? 'My Location' : origin.name, color: c.nav, kind: 'origin' });
+  if (current && stop) markers.push({ lat: stop.lat, lon: stop.lon, title: stop.name, color: c.primary, kind: 'stop', num: 1 });
+  if (current && dest) markers.push({ lat: dest.lat, lon: dest.lon, title: dest.name || 'Destination', color: c.danger, kind: 'dest' });
 
   // ---- SEARCH ----
   if (phase === 'search') {
@@ -293,21 +271,21 @@ export default function TripScreen({ stations, onStartNav }) {
         {/* From / To editor */}
         <View style={styles.odCard}>
           <TouchableOpacity style={[styles.odRow, editing === 'from' && styles.odRowActive]} onPress={() => setEditing('from')} activeOpacity={0.7}>
-            <Icon name={origin?.current ? 'navigate' : 'dot'} size={origin?.current ? 18 : 14} color={c.good} />
+            <Icon name={origin?.current ? 'navigate' : 'dot'} size={origin?.current ? 18 : 14} color={c.nav} />
             <Text style={styles.odTxt} numberOfLines={1}>{originName || 'Choose start'}</Text>
           </TouchableOpacity>
           {(stop || editing === 'stop') && (
             <>
               <View style={styles.odDivider} />
               <TouchableOpacity style={[styles.odRow, editing === 'stop' && styles.odRowActive]} onPress={() => setEditing('stop')} activeOpacity={0.7}>
-                <Icon name="dot" size={14} color={c.accent2} />
+                <View style={styles.numSq}><Text style={styles.numTxt}>1</Text></View>
                 <Text style={styles.odTxt} numberOfLines={1}>{stop?.name || 'Choose stop'}</Text>
               </TouchableOpacity>
             </>
           )}
           <View style={styles.odDivider} />
           <TouchableOpacity style={[styles.odRow, editing === 'to' && styles.odRowActive]} onPress={() => setEditing('to')} activeOpacity={0.7}>
-            <Icon name="pin" size={20} color={c.danger} />
+            <Icon name="flag" size={18} color={c.danger} />
             <Text style={styles.odTxt} numberOfLines={1}>{dest?.name || 'Choose destination'}</Text>
           </TouchableOpacity>
         </View>
@@ -388,15 +366,15 @@ export default function TripScreen({ stations, onStartNav }) {
       {/* From / stops / To (tap to edit) */}
       <View style={styles.odCard}>
         <TouchableOpacity style={styles.odRow} onPress={() => editField('from')} activeOpacity={0.7}>
-          <Icon name={origin?.current ? 'navigate' : 'dot'} size={origin?.current ? 18 : 14} color={c.good} />
+          <Icon name={origin?.current ? 'navigate' : 'dot'} size={origin?.current ? 18 : 14} color={c.nav} />
           <Text style={styles.odTxt} numberOfLines={1}>{origin?.current ? 'My Location' : origin?.name}</Text>
           <Icon name="forward" size={16} color={c.textFaint} />
         </TouchableOpacity>
         <View style={styles.odDivider} />
         {stop ? (
           <ReorderPair
-            top={{ name: stop.name, icon: 'dot', color: c.accent2, onPress: openStop, onRemove: removeStop }}
-            bottom={{ name: dest?.name, icon: 'pin', color: c.danger, onPress: () => editField('to') }}
+            top={{ name: stop.name, num: 1, color: c.primary, onPress: openStop, onRemove: removeStop }}
+            bottom={{ name: dest?.name, icon: 'flag', color: c.danger, onPress: () => editField('to') }}
             onSwap={swapStopDest}
             onDragStart={() => setDragging(true)}
             onDragEnd={() => setDragging(false)}
@@ -406,7 +384,7 @@ export default function TripScreen({ stations, onStartNav }) {
         ) : (
           <>
             <TouchableOpacity style={styles.odRow} onPress={() => editField('to')} activeOpacity={0.7}>
-              <Icon name="pin" size={20} color={c.danger} />
+              <Icon name="flag" size={18} color={c.danger} />
               <Text style={styles.odTxt} numberOfLines={1}>{dest?.name}</Text>
               <Icon name="forward" size={16} color={c.textFaint} />
             </TouchableOpacity>
@@ -430,71 +408,51 @@ export default function TripScreen({ stations, onStartNav }) {
       {busy && <ActivityIndicator color={c.primary} style={{ marginTop: 20 }} />}
       {error && <View style={styles.errRow}><Icon name="warning" size={14} color={c.danger} /><Text style={styles.err}>{error}</Text></View>}
 
-      {markers.length > 0 && <View style={{ marginTop: 14 }}><RouteMap markers={markers} markersOnly /></View>}
+      {markers.length > 0 && <View style={{ marginTop: 14 }}><RouteMap coords={route?.coords} markers={markers} ink={c.nav} paper="#fff" /></View>}
 
-      {/* Multi-stop itinerary (chained segments) */}
-      {multiPlan && (
+      {/* Recommended route (single or multi-stop) */}
+      {current && (
         <View style={styles.bestCard}>
           <View style={styles.bestTop}>
             <View style={styles.flex}>
-              <Text style={styles.bestMin}>{fmtMin(multiPlan.totalSec)}</Text>
-              <Text style={styles.bestSub}>{arrivalFor(multiPlan)} arrival · {fmtMiles(multiPlan.distanceM || 0)} · {multiPlan.points.length - 2} stop{multiPlan.points.length - 2 > 1 ? 's' : ''}</Text>
+              <Text style={styles.bestMin}>{fmtMin(current.totalSec)}</Text>
+              <Text style={styles.bestSub}>
+                {arrivalFor(current)} arrival · {fmtMiles(current.distanceM || 0)}{current.kind === 'multi' && points ? ` · ${points.length - 2} stop${points.length - 2 > 1 ? 's' : ''}` : ''}
+              </Text>
+              {current.kind === 'single' && (
+                <Text style={[styles.bikeTag, { color: current.bikeType === 'ebike' ? c.ebike : c.classic }]}>
+                  {current.bikeType === 'ebike' ? 'e-bike' : 'classic'}
+                </Text>
+              )}
             </View>
             <TouchableOpacity style={styles.goBtn} onPress={go} activeOpacity={0.9}>
               <Text style={styles.goTxt}>GO</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.divider} />
-          {multiPlan.segments.map((seg, si) => {
-            const bikeColor = seg.bikeType === 'ebike' ? c.ebike : c.classic;
-            const bikeWord = seg.bikeType === 'ebike' ? 'e-bike' : 'classic';
-            const toPoint = multiPlan.points[si + 1];
-            const isLastSeg = si === multiPlan.segments.length - 1;
-            return (
-              <React.Fragment key={si}>
-                <Step icon="walk" time={fmtMin(seg.walkToBikeSec)} title={`Walk to ${seg.originStation.name}`} styles={styles} c={c} />
-                <Step icon="bike" time={fmtMin(seg.rideSec)} title="Ride" sub={bikeWord} subColor={bikeColor} styles={styles} c={c} />
-                <Step icon="dock" title={`Dock at ${seg.destStation.name}`} sub={`${seg.destStation.docks} open docks`} styles={styles} c={c} />
-                <Step icon={isLastSeg ? 'walk' : 'pin'} time={fmtMin(seg.walkToDestSec)} title={`Walk to ${toPoint?.name || (isLastSeg ? 'your destination' : 'your stop')}`} subColor={isLastSeg ? undefined : c.accent2} sub={isLastSeg ? undefined : 'stop'} last={isLastSeg} styles={styles} c={c} />
-              </React.Fragment>
-            );
-          })}
+          {current.kind === 'multi'
+            ? current.segments.map((seg, si) => {
+                const bikeColor = seg.bikeType === 'ebike' ? c.ebike : c.classic;
+                const bikeWord = seg.bikeType === 'ebike' ? 'e-bike' : 'classic';
+                const toPoint = points?.[si + 1];
+                const isLastSeg = si === current.segments.length - 1;
+                return (
+                  <React.Fragment key={si}>
+                    <Step icon="walk" time={fmtMin(seg.walkToBikeSec)} title={`Walk to ${seg.originStation.name}`} styles={styles} c={c} />
+                    <Step icon="bike" time={fmtMin(seg.rideSec)} title="Ride" sub={bikeWord} subColor={bikeColor} styles={styles} c={c} />
+                    <Step icon="dock" title={`Dock at ${seg.destStation.name}`} sub={`${seg.destStation.docks} open docks`} styles={styles} c={c} />
+                    <Step icon={isLastSeg ? 'walk' : 'pin'} time={fmtMin(seg.walkToDestSec)} title={`Walk to ${toPoint?.name || (isLastSeg ? 'your destination' : 'your stop')}`} subColor={isLastSeg ? undefined : c.accent2} sub={isLastSeg ? undefined : 'stop'} last={isLastSeg} styles={styles} c={c} />
+                  </React.Fragment>
+                );
+              })
+            : [
+                <Step key="w1" icon="walk" time={fmtMin(current.walkToBikeSec)} title={`Walk to ${current.originStation.name}`} sub={`${current.originStation.classic} classic · ${current.originStation.ebikes} e-bikes`} styles={styles} c={c} />,
+                <Step key="ride" icon="bike" time={fmtMin(current.rideSec)} title="Ride" sub={current.bikeType === 'ebike' ? 'e-bike' : 'classic'} subColor={current.bikeType === 'ebike' ? c.ebike : c.classic} styles={styles} c={c} />,
+                <Step key="dock" icon="dock" title={`Dock at ${current.destStation.name}`} sub={`${current.destStation.docks} open docks`} styles={styles} c={c} />,
+                <Step key="w2" icon="walk" time={fmtMin(current.walkToDestSec)} title={`Walk to ${dest?.name || 'your destination'}`} last styles={styles} c={c} />,
+              ]}
         </View>
       )}
-
-      {/* Single-trip routes in stable order — tap a collapsed one to expand it in place */}
-      {allPlans.map((p, i) => {
-        if (i !== selIdx) {
-          return (
-            <TouchableOpacity key={i} style={styles.altCard} onPress={() => selectPlan(i)} activeOpacity={0.7}>
-              <Text style={styles.altMin}>{fmtMin(p.totalSec)}</Text>
-              <Text style={styles.altTxt} numberOfLines={1}>via {p.originStation.name} → {p.destStation.name}</Text>
-              <Icon name="forward" size={16} color={c.textFaint} />
-            </TouchableOpacity>
-          );
-        }
-        const bikeColor = p.bikeType === 'ebike' ? c.ebike : c.classic;
-        const bikeWord = p.bikeType === 'ebike' ? 'e-bike' : 'classic';
-        return (
-          <View key={i} style={styles.bestCard}>
-            <View style={styles.bestTop}>
-              <View style={styles.flex}>
-                <Text style={styles.bestMin}>{fmtMin(p.totalSec)}</Text>
-                <Text style={styles.bestSub}>{arrivalFor(p)} arrival · {fmtMiles(p.distanceM || 0)}</Text>
-                <Text style={[styles.bikeTag, { color: bikeColor }]}>{bikeWord}</Text>
-              </View>
-              <TouchableOpacity style={styles.goBtn} onPress={go} activeOpacity={0.9}>
-                <Text style={styles.goTxt}>GO</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.divider} />
-            <Step icon="walk" time={fmtMin(p.walkToBikeSec)} title={`Walk to ${p.originStation.name}`} sub={`${p.originStation.classic} classic · ${p.originStation.ebikes} e-bikes`} styles={styles} c={c} />
-            <Step icon="bike" time={fmtMin(p.rideSec)} title="Ride" sub={bikeWord} subColor={bikeColor} styles={styles} c={c} />
-            <Step icon="dock" title={`Dock at ${p.destStation.name}`} sub={`${p.destStation.docks} open docks`} styles={styles} c={c} />
-            <Step icon="walk" time={fmtMin(p.walkToDestSec)} title={`Walk to ${dest?.name || 'your destination'}`} last styles={styles} c={c} />
-          </View>
-        );
-      })}
     </ScrollView>
   );
 }
@@ -552,6 +510,8 @@ function makeStyles(c) {
     odRowActive: { backgroundColor: c.surfaceAlt },
     odTxt: { flex: 1, fontSize: 15, color: c.text, fontWeight: '600' },
     odDivider: { height: 1, backgroundColor: c.hairline, marginLeft: 44 },
+    numSq: { minWidth: 22, height: 22, paddingHorizontal: 4, borderRadius: 6, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
+    numTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
     addStopRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 14, paddingVertical: 11 },
     addStopTxt: { fontSize: 14, color: c.primary, fontWeight: '600' },
 

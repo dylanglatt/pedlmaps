@@ -102,18 +102,20 @@ export default function NavScreen({ trip, onEnd }) {
 
   const setVoice = (v) => { setVoiceOn(v); nav.setMuted(!v); };
 
+  // Navigation shows full detail: green bike pickups + red "P" docks (the
+  // operational "how"), plus the numbered place stops and the destination flag.
   const markers = [];
   if (plan.segments) {
     plan.segments.forEach((seg) => {
       markers.push({ lat: seg.originStation.lat, lon: seg.originStation.lon, title: 'Pick up', color: c.good, kind: 'pickup' });
-      markers.push({ lat: seg.destStation.lat, lon: seg.destStation.lon, title: 'Dock', color: c.danger, kind: 'dock' });
+      markers.push({ lat: seg.destStation.lat, lon: seg.destStation.lon, title: 'Dock', color: c.dock, kind: 'dock' });
     });
-    (plan.points || []).slice(1, -1).forEach((pt) => markers.push({ lat: pt.lat, lon: pt.lon, title: pt.name || 'Stop', color: c.accent2, kind: 'stop' }));
+    (plan.points || []).slice(1, -1).forEach((pt, i) => markers.push({ lat: pt.lat, lon: pt.lon, title: pt.name || 'Stop', color: c.primary, kind: 'stop', num: i + 1 }));
     if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.danger, kind: 'dest' });
   } else {
     markers.push(
       { lat: plan.originStation.lat, lon: plan.originStation.lon, title: 'Pick up', color: c.good, kind: 'pickup' },
-      { lat: plan.destStation.lat, lon: plan.destStation.lon, title: 'Dock', color: c.danger, kind: 'dock' },
+      { lat: plan.destStation.lat, lon: plan.destStation.lon, title: 'Dock', color: c.dock, kind: 'dock' },
     );
     if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.danger, kind: 'dest' });
   }
@@ -122,7 +124,7 @@ export default function NavScreen({ trip, onEnd }) {
   return (
     <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={() => { nav.stop(); onEnd && onEnd(); }}>
       <View style={styles.root}>
-        <RouteMap coords={route.coords} markers={markers} fill follow={overview ? null : here} overview={overview} showUser />
+        <RouteMap coords={route.coords} markers={markers} fill follow={overview ? null : here} overview={overview} showUser ink={c.nav} paper="#fff" />
 
         {/* Top maneuver banner */}
         <View style={[styles.banner, { top: insets.top + 8 }]}>
@@ -169,7 +171,9 @@ export default function NavScreen({ trip, onEnd }) {
                 const isFinal = i === arr.length - 1;
                 return (
                   <View key={i} style={styles.optRow}>
-                    <Icon name={isFinal ? 'pin' : 'dot'} size={isFinal ? 18 : 14} color={isFinal ? c.danger : c.accent2} />
+                    {isFinal
+                      ? <Icon name="flag" size={18} color={c.danger} />
+                      : <View style={styles.numSq}><Text style={styles.numTxt}>{i + 1}</Text></View>}
                     <View style={styles.flex}>
                       <Text style={styles.optName} numberOfLines={1}>{pt?.name || (isFinal ? 'Destination' : 'Stop')}</Text>
                       {!!pt?.address && <Text style={styles.optSub} numberOfLines={1}>{pt.address}</Text>}
@@ -233,6 +237,8 @@ function makeStyles(c) {
     statLabel: { fontSize: 12, color: c.textMute, fontWeight: '500', marginTop: 1 },
 
     expand: { paddingHorizontal: 20, paddingTop: 6, gap: 4 },
+    numSq: { minWidth: 22, height: 22, paddingHorizontal: 4, borderRadius: 6, backgroundColor: c.primary, alignItems: 'center', justifyContent: 'center' },
+    numTxt: { color: '#fff', fontSize: 12, fontWeight: '800' },
     optRow: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: c.surface, borderRadius: radius.md, paddingHorizontal: 14, paddingVertical: 13, marginBottom: 8 },
     optTxt: { flex: 1, fontSize: 15, color: c.text, fontWeight: '600' },
     optName: { fontSize: 15, color: c.text, fontWeight: '600' },

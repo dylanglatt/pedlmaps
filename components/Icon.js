@@ -23,6 +23,7 @@ const MAP = {
   start: { sf: 'location.north.circle.fill', ion: 'navigate-circle' },
   navigate: { sf: 'location.fill', ion: 'navigate' },
   dot: { sf: 'circle.fill', ion: 'ellipse' },
+  flag: { sf: 'flag.fill', ion: 'flag' },
   volumeOn: { sf: 'speaker.wave.2.fill', ion: 'volume-high' },
   volumeOff: { sf: 'speaker.slash.fill', ion: 'volume-mute' },
   star: { sf: 'star.fill', ion: 'star' },
