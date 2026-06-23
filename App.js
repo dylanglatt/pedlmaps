@@ -90,6 +90,7 @@ function AppInner() {
   }, [all]);
 
   const stations = useMemo(() => nearest(all, center.lat, center.lon, 75), [all, center]);
+  const listStations = useMemo(() => stations.slice(0, 8), [stations]); // just the closest few; map covers the rest, status keeps full nearby count
   const chartStation = useMemo(() => all.find((s) => s.id === chartId) || null, [all, chartId]);
 
   const reloadPlaces = useCallback(async () => { setPlaces(await loadPlaces()); }, []);
@@ -102,7 +103,7 @@ function AppInner() {
   const styles = useMemo(() => makeStyles(c), [c]);
 
   const statusColor = error ? c.danger : loading ? c.textFaint : c.good;
-  const statusText = error ? 'Offline' : loading ? 'Loading…' : `${stations.length} nearby · ${formatAge(Math.floor((updatedAt || Date.now()) / 1000))}`;
+  const statusText = error ? 'Offline' : loading ? 'Loading…' : `${stations.length} stations nearby · updated ${formatAge(Math.floor((updatedAt || Date.now()) / 1000))}`;
 
   const Header = () =>
     searching ? (
@@ -171,7 +172,7 @@ function AppInner() {
           </View>
         ) : (
           <StationList
-            stations={stations}
+            stations={listStations}
             mode={mode}
             bikeType={bikeType}
             units={units}

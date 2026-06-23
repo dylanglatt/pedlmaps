@@ -65,9 +65,12 @@ export default function StationList({ stations, mode, bikeType = 'both', units =
       keyExtractor={(s) => s.id}
       renderItem={renderItem}
       scrollEnabled={scroll}
+      bounces={false}
+      overScrollMode="never"
       ListHeaderComponent={header}
       ItemSeparatorComponent={() => <View style={styles.sep} />}
-      contentContainerStyle={{ paddingVertical: 4, paddingBottom: 28 }}
+      ListFooterComponent={<View style={styles.listEnd} />}
+      contentContainerStyle={{ paddingTop: 4 }}
     />
   );
 }
@@ -89,5 +92,6 @@ function makeStyles(c) {
     invLabel: { fontSize: 11.5, color: c.textFaint, fontWeight: '500' },
     chartBtn: { width: 40, height: 40, borderRadius: radius.sm, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
     sep: { height: 1, backgroundColor: c.hairline, marginLeft: 78 },
+    listEnd: { height: 16 },
   });
 }
