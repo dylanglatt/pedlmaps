@@ -109,13 +109,13 @@ export default function NavScreen({ trip, onEnd }) {
       markers.push({ lat: seg.destStation.lat, lon: seg.destStation.lon, title: 'Dock', color: c.danger, kind: 'dock' });
     });
     (plan.points || []).slice(1, -1).forEach((pt) => markers.push({ lat: pt.lat, lon: pt.lon, title: pt.name || 'Stop', color: c.accent2, kind: 'stop' }));
-    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.primary, kind: 'dest' });
+    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.danger, kind: 'dest' });
   } else {
     markers.push(
       { lat: plan.originStation.lat, lon: plan.originStation.lon, title: 'Pick up', color: c.good, kind: 'pickup' },
       { lat: plan.destStation.lat, lon: plan.destStation.lon, title: 'Dock', color: c.danger, kind: 'dock' },
     );
-    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.primary, kind: 'dest' });
+    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.danger, kind: 'dest' });
   }
   const distLabel = fmtDist(dist);
 
@@ -169,7 +169,7 @@ export default function NavScreen({ trip, onEnd }) {
                 const isFinal = i === arr.length - 1;
                 return (
                   <View key={i} style={styles.optRow}>
-                    <Icon name="pin" size={18} color={isFinal ? c.primary : c.accent2} />
+                    <Icon name={isFinal ? 'pin' : 'dot'} size={isFinal ? 18 : 14} color={isFinal ? c.danger : c.accent2} />
                     <View style={styles.flex}>
                       <Text style={styles.optName} numberOfLines={1}>{pt?.name || (isFinal ? 'Destination' : 'Stop')}</Text>
                       {!!pt?.address && <Text style={styles.optSub} numberOfLines={1}>{pt.address}</Text>}

@@ -275,12 +275,12 @@ export default function TripScreen({ stations, onStartNav }) {
       markers.push({ lat: seg.destStation.lat, lon: seg.destStation.lon, title: `Dock · ${seg.destStation.name}`, color: c.danger, kind: 'dock' });
     });
     multiPlan.points.slice(1, -1).forEach((pt, i) => markers.push({ lat: pt.lat, lon: pt.lon, title: pt.name || `Stop ${i + 1}`, color: c.accent2, kind: 'stop' }));
-    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: dest.name || 'Destination', color: c.primary, kind: 'dest' });
+    if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: dest.name || 'Destination', color: c.danger, kind: 'dest' });
   } else if (current) {
     markers = [
       { lat: current.originStation.lat, lon: current.originStation.lon, title: `Pick up · ${current.originStation.name}`, color: c.good, kind: 'pickup' },
       { lat: current.destStation.lat, lon: current.destStation.lon, title: `Dock · ${current.destStation.name}`, color: c.danger, kind: 'dock' },
-      ...(dest ? [{ lat: dest.lat, lon: dest.lon, title: dest.name || 'Destination', color: c.primary, kind: 'dest' }] : []),
+      ...(dest ? [{ lat: dest.lat, lon: dest.lon, title: dest.name || 'Destination', color: c.danger, kind: 'dest' }] : []),
     ];
   }
 
@@ -293,14 +293,14 @@ export default function TripScreen({ stations, onStartNav }) {
         {/* From / To editor */}
         <View style={styles.odCard}>
           <TouchableOpacity style={[styles.odRow, editing === 'from' && styles.odRowActive]} onPress={() => setEditing('from')} activeOpacity={0.7}>
-            <Icon name="start" size={20} color={c.primary} />
+            <Icon name={origin?.current ? 'navigate' : 'dot'} size={origin?.current ? 18 : 14} color={c.good} />
             <Text style={styles.odTxt} numberOfLines={1}>{originName || 'Choose start'}</Text>
           </TouchableOpacity>
           {(stop || editing === 'stop') && (
             <>
               <View style={styles.odDivider} />
               <TouchableOpacity style={[styles.odRow, editing === 'stop' && styles.odRowActive]} onPress={() => setEditing('stop')} activeOpacity={0.7}>
-                <Icon name="pin" size={18} color={c.accent2} />
+                <Icon name="dot" size={14} color={c.accent2} />
                 <Text style={styles.odTxt} numberOfLines={1}>{stop?.name || 'Choose stop'}</Text>
               </TouchableOpacity>
             </>
@@ -388,14 +388,14 @@ export default function TripScreen({ stations, onStartNav }) {
       {/* From / stops / To (tap to edit) */}
       <View style={styles.odCard}>
         <TouchableOpacity style={styles.odRow} onPress={() => editField('from')} activeOpacity={0.7}>
-          <Icon name="start" size={20} color={c.primary} />
+          <Icon name={origin?.current ? 'navigate' : 'dot'} size={origin?.current ? 18 : 14} color={c.good} />
           <Text style={styles.odTxt} numberOfLines={1}>{origin?.current ? 'My Location' : origin?.name}</Text>
           <Icon name="forward" size={16} color={c.textFaint} />
         </TouchableOpacity>
         <View style={styles.odDivider} />
         {stop ? (
           <ReorderPair
-            top={{ name: stop.name, icon: 'pin', color: c.accent2, onPress: openStop, onRemove: removeStop }}
+            top={{ name: stop.name, icon: 'dot', color: c.accent2, onPress: openStop, onRemove: removeStop }}
             bottom={{ name: dest?.name, icon: 'pin', color: c.danger, onPress: () => editField('to') }}
             onSwap={swapStopDest}
             onDragStart={() => setDragging(true)}

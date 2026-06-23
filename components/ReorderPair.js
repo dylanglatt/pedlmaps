@@ -45,7 +45,7 @@ export default function ReorderPair({ top, bottom, onSwap, onDragStart, onDragEn
   const Row = ({ item, pan, resp }) => (
     <Animated.View style={{ transform: [{ translateY: pan }], zIndex: 5, backgroundColor: c.elevated }}>
       <View style={[styles.odRow, { height: ROW_H }]}>
-        <Icon name={item.icon} size={18} color={item.color} />
+        <Icon name={item.icon} size={item.icon === 'dot' ? 14 : 18} color={item.color} />
         <TouchableOpacity style={styles.flex} onPress={item.onPress} activeOpacity={0.7}>
           <Text style={styles.odTxt} numberOfLines={1}>{item.name}</Text>
         </TouchableOpacity>
