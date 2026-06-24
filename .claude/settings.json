@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(./**)",
+      "Edit(./**)",
+      "Bash(npm install)",
+      "Bash(npm ci:*)",
+      "Bash(npm run:*)",
+      "Bash(npx expo:*)",
+      "Bash(node:*)",
+      "Bash(python3 scripts/:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(eas update:*)",
+      "Bash(rg:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(git commit:*)",
+      "Bash(git reset:*)",
+      "Bash(git checkout:*)",
+      "Bash(eas build:*)",
+      "Bash(npx expo prebuild:*)",
+      "Bash(npm uninstall:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Bash(rm -rf:*)"
+    ]
+  }
+}

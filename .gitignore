@@ -37,3 +37,6 @@ scripts/snapshots.csv
 assets/pedl logo.png
 assets/icon-dockhop-backup.png
 pedl logo.png
+
+# Claude Code (personal overrides only; shared config is committed)
+.claude/settings.local.json
