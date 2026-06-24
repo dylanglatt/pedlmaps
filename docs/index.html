@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pedl Maps — smarter city bike share</title>
+<meta name="description" content="Pedl Maps shows live bike and dock availability and gives door-to-door routing with voice navigation for NYC bike share." />
+<style>
+  :root {
+    --ink: #0C1322; --muted: #5A6478; --indigo: #5B53E6; --teal: #0EA5B5;
+    --bg: #FFFFFF; --surface: #F4F6FB; --border: #E4E8F2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    margin: 0; color: var(--ink); background: var(--bg); line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--indigo); text-decoration: none; }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 0 1.25rem; }
+  header { border-bottom: 1px solid var(--border); }
+  nav { display: flex; align-items: center; justify-content: space-between; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.15rem; color: var(--ink); }
+  .mark { width: 30px; height: 30px; border-radius: 9px; background: var(--indigo); display: flex; align-items: center; justify-content: center; }
+  .navlinks a { color: var(--muted); font-weight: 600; margin-left: 1.25rem; font-size: 0.95rem; }
+  .navlinks a:hover { color: var(--ink); }
+
+  .hero { text-align: center; padding: 5rem 0 3.5rem; }
+  .hero h1 { font-size: 3rem; line-height: 1.1; margin: 0 0 0.75rem; letter-spacing: -0.02em; }
+  .hero .tag { font-size: 1.35rem; color: var(--teal); font-weight: 700; margin: 0 0 1rem; }
+  .hero p.lead { font-size: 1.15rem; color: var(--muted); max-width: 560px; margin: 0 auto 2rem; }
+  .cta { display: inline-flex; align-items: center; gap: 8px; background: var(--indigo); color: #fff; font-weight: 700;
+         padding: 14px 26px; border-radius: 999px; font-size: 1.05rem; }
+  .cta.soon { background: var(--surface); color: var(--muted); cursor: default; border: 1px solid var(--border); }
+  .subcta { margin-top: 0.9rem; font-size: 0.95rem; color: var(--muted); }
+
+  .features { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; padding: 1rem 0 4rem; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 1.5rem; }
+  .card .ic { width: 42px; height: 42px; border-radius: 11px; background: #fff; border: 1px solid var(--border);
+              display: flex; align-items: center; justify-content: center; margin-bottom: 0.9rem; }
+  .card h3 { margin: 0 0 0.35rem; font-size: 1.15rem; }
+  .card p { margin: 0; color: var(--muted); font-size: 0.97rem; }
+
+  footer { border-top: 1px solid var(--border); padding: 2rem 0 3rem; color: var(--muted); font-size: 0.9rem; }
+  footer .row { display: flex; flex-wrap: wrap; gap: 1rem; justify-content: space-between; align-items: center; }
+  footer a { color: var(--muted); font-weight: 600; margin-right: 1.1rem; }
+  footer a:hover { color: var(--ink); }
+  .disclaimer { margin-top: 1rem; font-size: 0.82rem; color: #98A2B3; }
+  @media (max-width: 560px) { .hero h1 { font-size: 2.3rem; } .hero { padding: 3.5rem 0 2.5rem; } }
+</style>
+</head>
+<body>
+  <header>
+    <div class="wrap">
+      <nav>
+        <div class="brand">
+          <span class="mark" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="6" cy="17" r="3.2"/><circle cx="18" cy="17" r="3.2"/>
+              <path d="M6 17 L11 7 L15 7 M9 7 L14.5 17 L18 17"/>
+            </svg>
+          </span>
+          Pedl Maps
+        </div>
+        <div class="navlinks">
+          <a href="/support.html">Support</a>
+          <a href="/privacy.html">Privacy</a>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1>Pedl Maps</h1>
+      <p class="tag">Smarter city bike share</p>
+      <p class="lead">See live bike and dock availability near you, and get door-to-door routing with spoken turn-by-turn navigation across NYC.</p>
+      <span class="cta soon">Coming soon to the App Store</span>
+      <p class="subcta">Want early access? Email <a href="mailto:hello@pedlmaps.com">hello@pedlmaps.com</a></p>
+    </section>
+
+    <section class="features">
+      <div class="card">
+        <div class="ic" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5B53E6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>
+        </div>
+        <h3>Live bikes &amp; docks</h3>
+        <p>Real-time availability at every station near you, color-coded at a glance.</p>
+      </div>
+      <div class="card">
+        <div class="ic" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0EA5B5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M6 17 L11 7 L15 7 M9 7 L14.5 17 L18 17"/></svg>
+        </div>
+        <h3>Plan a trip</h3>
+        <p>Door-to-door walk-ride-walk routing that picks the best stations for your trip.</p>
+      </div>
+      <div class="card">
+        <div class="ic" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#5B53E6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 5 L6 9 H2 v6 h4 l5 4 z"/><path d="M15.5 8.5a5 5 0 0 1 0 7M19 5a9 9 0 0 1 0 14"/></svg>
+        </div>
+        <h3>Voice navigation</h3>
+        <p>Spoken turn-by-turn that keeps guiding you with the screen off while you ride.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="row">
+        <div class="brand" style="font-size:1rem;">
+          <span class="mark" style="width:24px;height:24px;border-radius:7px;" aria-hidden="true">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="17" r="3.2"/><circle cx="18" cy="17" r="3.2"/><path d="M6 17 L11 7 L15 7 M9 7 L14.5 17 L18 17"/></svg>
+          </span>
+          Pedl Maps
+        </div>
+        <div>
+          <a href="/privacy.html">Privacy</a>
+          <a href="/support.html">Support</a>
+          <a href="mailto:hello@pedlmaps.com">Contact</a>
+        </div>
+      </div>
+      <p class="disclaimer">© 2026 Pedl Maps. Not affiliated with, sponsored by, or endorsed by Citi Bike or Lyft. Station data comes from the public GBFS feed.</p>
+    </div>
+  </footer>
+</body>
+</html>
