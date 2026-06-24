@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Modal, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -9,7 +9,7 @@ import * as Updates from 'expo-updates';
 import Icon from './Icon';
 import Logo from './Logo';
 import { useTheme, radius, shadow } from '../lib/theme';
-import { FEEDBACK_WEBHOOK } from '../lib/config';
+import { FEEDBACK_WEBHOOK, PRIVACY_URL } from '../lib/config';
 import app from '../app.json';
 
 const VERSION = app?.expo?.version || '?';
@@ -142,8 +142,6 @@ export default function Feedback({ visible, screen, onClose }) {
                   <TextInput style={[styles.field, styles.flex]} placeholder="Name (optional)" placeholderTextColor={c.textFaint} value={name} onChangeText={setName} />
                   <TextInput style={[styles.field, styles.flexWide]} placeholder="Email (optional)" placeholderTextColor={c.textFaint} value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" autoCorrect={false} />
                 </View>
-                <Text style={styles.hint}>Optional · remembered for next time. Email only if you'd like a reply.</Text>
-
                 {status === 'error' && (
                   <Text style={styles.err}>
                     {FEEDBACK_WEBHOOK ? "Couldn't send — check your connection and try again." : 'Feedback channel not configured yet.'}
@@ -159,7 +157,16 @@ export default function Feedback({ visible, screen, onClose }) {
                     ? <ActivityIndicator color="#fff" />
                     : <Text style={styles.sendTxt}>Send</Text>}
                 </TouchableOpacity>
-                <Text style={styles.foot}>Pedl v{VERSION}</Text>
+                <Text style={styles.foot}>
+                  <Text
+                    style={styles.footLink}
+                    onPress={() => { if (PRIVACY_URL) Linking.openURL(PRIVACY_URL).catch(() => {}); }}
+                    accessibilityRole="link"
+                  >
+                    Privacy Policy
+                  </Text>
+                  {`   ·   Pedl v${VERSION}`}
+                </Text>
               </>
             )}
           </View>
@@ -183,14 +190,14 @@ function makeStyles(c) {
     cat: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderRadius: radius.md, backgroundColor: c.surface, borderWidth: 1, borderColor: 'transparent' },
     catTxt: { fontSize: 13, fontWeight: '600', color: c.textMute },
     input: { backgroundColor: c.surface, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, minHeight: 96, padding: 12, fontSize: 15, color: c.text, marginBottom: 10 },
-    row: { flexDirection: 'row', gap: 8, marginBottom: 6 },
+    row: { flexDirection: 'row', gap: 8, marginBottom: 16 },
     field: { backgroundColor: c.surface, borderRadius: radius.md, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, paddingHorizontal: 11, paddingVertical: 10, fontSize: 14, color: c.text },
-    hint: { fontSize: 11.5, color: c.textFaint, marginBottom: 14, paddingLeft: 2 },
     err: { fontSize: 13, color: c.danger, fontWeight: '600', marginBottom: 12 },
     send: { backgroundColor: c.primary, borderRadius: radius.md, paddingVertical: 15, alignItems: 'center' },
     sendOff: { opacity: 0.45 },
     sendTxt: { color: c.onPrimary, fontSize: 16, fontWeight: '800' },
     foot: { textAlign: 'center', fontSize: 11.5, color: c.textFaint, marginTop: 10 },
+    footLink: { color: c.primary, fontWeight: '700', textDecorationLine: 'underline' },
     done: { alignItems: 'center', paddingVertical: 16, gap: 8 },
     doneTitle: { fontSize: 20, fontWeight: '800', color: c.text },
     doneSub: { fontSize: 14, color: c.textMute, marginBottom: 12, textAlign: 'center', lineHeight: 20 },
