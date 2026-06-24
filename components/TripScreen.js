@@ -313,7 +313,7 @@ export default function TripScreen({ stations, onStartNav }) {
           )}
           <View style={styles.odDivider} />
           <TouchableOpacity style={[styles.odRow, editing === 'to' && styles.odRowActive]} onPress={() => setEditing('to')} activeOpacity={0.7}>
-            <Icon name="flag" size={18} color={c.danger} />
+            <Icon name="dot" size={14} color={c.danger} />
             <Text style={styles.odTxt} numberOfLines={1}>{dest?.name || 'Choose destination'}</Text>
           </TouchableOpacity>
         </View>
@@ -417,7 +417,7 @@ export default function TripScreen({ stations, onStartNav }) {
         ) : (
           <>
             <TouchableOpacity style={styles.odRow} onPress={() => editField('to')} activeOpacity={0.7}>
-              <Icon name="flag" size={18} color={c.danger} />
+              <Icon name="dot" size={14} color={c.danger} />
               <Text style={styles.odTxt} numberOfLines={1}>{dest?.name}</Text>
               <Icon name="forward" size={16} color={c.textFaint} />
             </TouchableOpacity>
