@@ -16,7 +16,7 @@ import NavScreen from './components/NavScreen';
 import Feedback from './components/Feedback';
 import Icon from './components/Icon';
 import { fetchStations, nearest } from './lib/gbfs';
-import { getLocation, DEFAULT_CENTER } from './lib/location';
+import { getLocation, watchLocation, DEFAULT_CENTER } from './lib/location';
 import { loadPlaces, addPlace, removePlace, setFlipMode, makePlace, migrateLegacy } from './lib/savedPlaces';
 import { loadUnits, saveUnits } from './lib/storage';
 import { formatAge } from './lib/geo';
@@ -65,7 +65,9 @@ function AppInner() {
   const [navTrip, setNavTrip] = useState(null);
   const [locStatus, setLocStatus] = useState('granted'); // 'granted' | 'denied' | 'unavailable'
   const [recenterTick, setRecenterTick] = useState(0);
+  const [userLoc, setUserLoc] = useState(null); // live device position for the map dot (null = unknown)
   const timer = useRef(null);
+  const watchStop = useRef(null);
   const migrated = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -83,11 +85,13 @@ function AppInner() {
       setPlaces(pl); setUnits(un); await refresh();
       SplashScreen.hideAsync().catch(() => {});
       // The native map seeds its region from the Midtown default at mount; once we
-      // have a real fix, recenter on it so the user-location dot is actually in view.
-      if (!loc.fallback) setRecenterTick((t) => t + 1);
+      // have a real fix, drop the dot there and recenter so it's actually in view.
+      if (!loc.fallback) { setUserLoc({ lat: loc.lat, lon: loc.lon }); setRecenterTick((t) => t + 1); }
+      // Keep the dot live while browsing (no re-prompt; no-ops if not granted).
+      watchStop.current = await watchLocation((p) => { setUserLoc(p); setLocStatus('granted'); });
     })();
     timer.current = setInterval(refresh, REFRESH_MS);
-    return () => clearInterval(timer.current);
+    return () => { clearInterval(timer.current); if (watchStop.current) watchStop.current(); };
   }, [refresh]);
 
   // Locate button: re-fetch the user's position and recenter the map. If
@@ -99,6 +103,7 @@ function AppInner() {
       Linking.openSettings().catch(() => {});
       return;
     }
+    setUserLoc({ lat: loc.lat, lon: loc.lon });
     setCenter({ lat: loc.lat, lon: loc.lon });
     setRecenterTick((t) => t + 1);
   }, []);
@@ -194,7 +199,7 @@ function AppInner() {
     <View style={styles.root}>
       <StatusBar barStyle={c.scheme === 'dark' ? 'light-content' : 'dark-content'} />
 
-      <StationMap stations={all} center={center} mode={mode} bikeType={bikeType} selectedId={selectedId} recenterTick={recenterTick} onSelect={(s) => { setSelectedId(s.id); setChartId(s.id); }} />
+      <StationMap stations={all} center={center} userLoc={userLoc} mode={mode} bikeType={bikeType} selectedId={selectedId} recenterTick={recenterTick} onSelect={(s) => { setSelectedId(s.id); setChartId(s.id); }} />
 
       {locStatus !== 'granted' && (
         <TouchableOpacity

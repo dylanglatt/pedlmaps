@@ -3,14 +3,31 @@ import { View, Text, StyleSheet } from 'react-native';
 import MapView, { Marker, Callout, PROVIDER_DEFAULT } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
 import { availabilityLevel, countFor } from '../lib/gbfs';
+import { distanceMeters } from '../lib/geo';
 import { useTheme } from '../lib/theme';
+
+// Hide a station pill this close to the user dot so the dot stands clean (it's
+// still in the station list). Just the dot's own footprint — only suppresses a
+// station you're effectively standing on.
+const USER_HIDE_M = 20;
 
 // Native map with viewport culling + zoom level-of-detail:
 //  far  -> grid clusters,  mid -> dots,  near -> full pills.
-export default function StationMap({ stations, center, mode, bikeType = 'both', selectedId, onSelect, recenterTick = 0 }) {
+export default function StationMap({ stations, center, userLoc = null, mode, bikeType = 'both', selectedId, onSelect, recenterTick = 0 }) {
   const c = useTheme();
   const ref = useRef(null);
   const [region, setRegion] = useState({ latitude: center.lat, longitude: center.lon, latitudeDelta: 0.02, longitudeDelta: 0.02 });
+
+  // react-native-maps shows a blank custom marker if tracksViewChanges starts
+  // false, so paint once then freeze it (perf: the dot view never changes, only
+  // its coordinate, which doesn't need re-rasterizing).
+  const [userTracks, setUserTracks] = useState(true);
+  useEffect(() => {
+    if (!userLoc) return;
+    setUserTracks(true);
+    const t = setTimeout(() => setUserTracks(false), 1500);
+    return () => clearTimeout(t);
+  }, [userLoc ? 1 : 0]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Recenter the map on `center` whenever the locate button bumps recenterTick.
   // (Gated on the tick so list-selection center changes don't yank the map.)
@@ -26,7 +43,9 @@ export default function StationMap({ stations, center, mode, bikeType = 'both', 
     const latD = region.latitudeDelta, lonD = region.longitudeDelta;
     const minLat = region.latitude - latD * 0.7, maxLat = region.latitude + latD * 0.7;
     const minLon = region.longitude - lonD * 0.7, maxLon = region.longitude + lonD * 0.7;
-    const vis = stations.filter((s) => s.lat >= minLat && s.lat <= maxLat && s.lon >= minLon && s.lon <= maxLon);
+    let vis = stations.filter((s) => s.lat >= minLat && s.lat <= maxLat && s.lon >= minLon && s.lon <= maxLon);
+    // Drop the pill directly under the user dot so the dot reads clean.
+    if (userLoc) vis = vis.filter((s) => distanceMeters(s.lat, s.lon, userLoc.lat, userLoc.lon) > USER_HIDE_M);
 
     if (latD > 0.08) {
       const cell = latD / 5;
@@ -41,7 +60,7 @@ export default function StationMap({ stations, center, mode, bikeType = 'both', 
     }
     if (latD > 0.03) return { lod: 'dot', items: vis };
     return { lod: 'pill', items: vis };
-  }, [stations, region, mode, bikeType]);
+  }, [stations, region, mode, bikeType, userLoc]);
 
   const zoomTo = (lat, lon) => {
     ref.current && ref.current.animateToRegion(
@@ -55,7 +74,6 @@ export default function StationMap({ stations, center, mode, bikeType = 'both', 
       ref={ref}
       provider={PROVIDER_DEFAULT}
       style={StyleSheet.absoluteFill}
-      showsUserLocation
       userInterfaceStyle={c.scheme}
       initialRegion={region}
       onRegionChangeComplete={setRegion}
@@ -108,8 +126,30 @@ export default function StationMap({ stations, center, mode, bikeType = 'both', 
           </Marker>
         );
       })}
+
+      {userLoc && (
+        <Marker
+          coordinate={{ latitude: userLoc.lat, longitude: userLoc.lon }}
+          anchor={{ x: 0.5, y: 0.5 }}
+          zIndex={1000}
+          tracksViewChanges={userTracks}
+        >
+          <View style={[styles.userHalo, { backgroundColor: hexA(c.nav, 0.16) }]}>
+            <View style={styles.userCasing}>
+              <View style={[styles.userDot, { backgroundColor: c.nav }]} />
+            </View>
+          </View>
+        </Marker>
+      )}
     </MapView>
   );
+}
+
+// Hex color -> rgba string at the given alpha (for the translucent accuracy halo).
+function hexA(hex, a) {
+  const h = (hex || '#0A84FF').replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map((x) => x + x).join('') : h, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
 
 const styles = StyleSheet.create({
@@ -127,4 +167,12 @@ const styles = StyleSheet.create({
   callout: { padding: 10, borderRadius: 12, borderWidth: 1, minWidth: 150 },
   cName: { fontSize: 14, fontWeight: '700' },
   cMeta: { fontSize: 12, marginTop: 2 },
+
+  // User-location dot: translucent accuracy halo > white casing > solid dot.
+  userHalo: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  userCasing: {
+    width: 22, height: 22, borderRadius: 11, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+    shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 2.5, shadowOffset: { width: 0, height: 1 }, elevation: 4,
+  },
+  userDot: { width: 14, height: 14, borderRadius: 7 },
 });

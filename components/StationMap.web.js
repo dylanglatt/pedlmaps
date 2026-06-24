@@ -3,7 +3,19 @@ import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-lea
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { availabilityLevel, countFor } from '../lib/gbfs';
+import { distanceMeters } from '../lib/geo';
 import { useTheme } from '../lib/theme';
+
+const USER_HIDE_M = 20; // hide the station pill directly under the user dot
+
+function userIcon(color) {
+  return L.divIcon({
+    className: '', iconSize: [44, 44], iconAnchor: [22, 22],
+    html: `<div style="width:44px;height:44px;border-radius:22px;background:rgba(10,132,255,0.16);display:flex;align-items:center;justify-content:center">
+      <div style="width:22px;height:22px;border-radius:11px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.3)">
+        <div style="width:14px;height:14px;border-radius:7px;background:${color}"></div></div></div>`,
+  });
+}
 
 const TILES = {
   light: 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
@@ -54,7 +66,7 @@ function Tracker({ onChange }) {
   return null;
 }
 
-export default function StationMap({ stations, center, mode, bikeType = 'both', selectedId, onSelect, recenterTick = 0 }) {
+export default function StationMap({ stations, center, userLoc = null, mode, bikeType = 'both', selectedId, onSelect, recenterTick = 0 }) {
   const c = useTheme();
   const tile = c.scheme === 'dark' ? TILES.dark : TILES.light;
   const [view, setView] = useState(null); // { zoom, bounds }
@@ -62,14 +74,15 @@ export default function StationMap({ stations, center, mode, bikeType = 'both', 
   const markers = useMemo(() => {
     if (!view) return [];
     const { zoom, bounds } = view;
-    const vis = stations.filter((s) => s.lat >= bounds.minLat && s.lat <= bounds.maxLat && s.lon >= bounds.minLon && s.lon <= bounds.maxLon);
+    let vis = stations.filter((s) => s.lat >= bounds.minLat && s.lat <= bounds.maxLat && s.lon >= bounds.minLon && s.lon <= bounds.maxLon);
+    if (userLoc) vis = vis.filter((s) => distanceMeters(s.lat, s.lon, userLoc.lat, userLoc.lon) > USER_HIDE_M);
     const usePill = zoom >= 14;
     return vis.map((s) => {
       const color = c[availabilityLevel(s, mode, bikeType)];
       const icon = usePill ? pillIcon(innerHtml(s, mode, bikeType), color, c.bg, selectedId === s.id) : dotIcon(color, c.bg);
       return { s, icon };
     });
-  }, [stations, view, mode, bikeType, selectedId, c]);
+  }, [stations, view, mode, bikeType, selectedId, c, userLoc]);
 
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
@@ -80,6 +93,9 @@ export default function StationMap({ stations, center, mode, bikeType = 'both', 
         {markers.map(({ s, icon }) => (
           <Marker key={s.id} position={[s.lat, s.lon]} icon={icon} eventHandlers={{ click: () => onSelect && onSelect(s) }} />
         ))}
+        {userLoc && (
+          <Marker position={[userLoc.lat, userLoc.lon]} icon={userIcon(c.nav)} zIndexOffset={1000} interactive={false} keyboard={false} />
+        )}
       </MapContainer>
     </div>
   );
