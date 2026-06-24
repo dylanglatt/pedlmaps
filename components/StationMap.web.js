@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { availabilityLevel, countFor } from '../lib/gbfs';
@@ -34,6 +34,16 @@ function dotIcon(color, ring) {
   });
 }
 
+// Flies the map to `center` whenever the locate button bumps `tick`.
+function Recenter({ center, tick }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!tick) return;
+    map.flyTo([center.lat, center.lon], Math.max(map.getZoom(), 15), { duration: 0.6 });
+  }, [tick]); // eslint-disable-line
+  return null;
+}
+
 function Tracker({ onChange }) {
   const map = useMapEvents({ moveend: emit, zoomend: emit });
   function emit() {
@@ -44,7 +54,7 @@ function Tracker({ onChange }) {
   return null;
 }
 
-export default function StationMap({ stations, center, mode, bikeType = 'both', selectedId, onSelect }) {
+export default function StationMap({ stations, center, mode, bikeType = 'both', selectedId, onSelect, recenterTick = 0 }) {
   const c = useTheme();
   const tile = c.scheme === 'dark' ? TILES.dark : TILES.light;
   const [view, setView] = useState(null); // { zoom, bounds }
@@ -66,6 +76,7 @@ export default function StationMap({ stations, center, mode, bikeType = 'both', 
       <MapContainer key={c.scheme} center={[center.lat, center.lon]} zoom={15} zoomControl={false} style={{ height: '100%', width: '100%' }}>
         <TileLayer url={tile} attribution='&copy; OpenStreetMap &copy; CARTO' subdomains="abcd" />
         <Tracker onChange={(zoom, bounds) => setView({ zoom, bounds })} />
+        <Recenter center={center} tick={recenterTick} />
         {markers.map(({ s, icon }) => (
           <Marker key={s.id} position={[s.lat, s.lon]} icon={icon} eventHandlers={{ click: () => onSelect && onSelect(s) }} />
         ))}

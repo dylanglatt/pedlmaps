@@ -1,4 +1,4 @@
-import React, { useState, useRef, useMemo } from 'react';
+import React, { useState, useRef, useMemo, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import MapView, { Marker, Callout, PROVIDER_DEFAULT } from 'react-native-maps';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,10 +7,20 @@ import { useTheme } from '../lib/theme';
 
 // Native map with viewport culling + zoom level-of-detail:
 //  far  -> grid clusters,  mid -> dots,  near -> full pills.
-export default function StationMap({ stations, center, mode, bikeType = 'both', selectedId, onSelect }) {
+export default function StationMap({ stations, center, mode, bikeType = 'both', selectedId, onSelect, recenterTick = 0 }) {
   const c = useTheme();
   const ref = useRef(null);
   const [region, setRegion] = useState({ latitude: center.lat, longitude: center.lon, latitudeDelta: 0.02, longitudeDelta: 0.02 });
+
+  // Recenter the map on `center` whenever the locate button bumps recenterTick.
+  // (Gated on the tick so list-selection center changes don't yank the map.)
+  useEffect(() => {
+    if (!recenterTick || !ref.current) return;
+    ref.current.animateToRegion(
+      { latitude: center.lat, longitude: center.lon, latitudeDelta: 0.02, longitudeDelta: 0.02 },
+      500
+    );
+  }, [recenterTick]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const { lod, items } = useMemo(() => {
     const latD = region.latitudeDelta, lonD = region.longitudeDelta;

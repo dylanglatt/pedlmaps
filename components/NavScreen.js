@@ -8,6 +8,7 @@ import Svg, { Path, Circle } from 'react-native-svg';
 import Icon from './Icon';
 import RouteMap from './RouteMap';
 import { nav } from '../lib/voiceNav';
+import { arrivalLine } from '../lib/navPhrasing';
 import { fmtMiles } from '../lib/tripPlanner';
 import { formatClock } from '../lib/geo';
 import { useTheme, radius, shadow } from '../lib/theme';
@@ -79,7 +80,7 @@ export default function NavScreen({ trip, onEnd }) {
       onProgress: ({ maneuver, next: nx, distance }) => { setCur(maneuver); setNext(nx); setDist(distance); },
       onLocationUpdate: (h) => setHere(h),
       onArrive: () => {
-        setCur({ instruction: 'You have arrived.' }); setNext(null); setDist(null);
+        setCur({ instruction: arrivalLine(dest && !dest.current ? (dest.name || dest.label) : null) }); setNext(null); setDist(null);
         // Let the spoken "You have arrived" land, then close the route itself.
         setTimeout(() => { onEnd && onEnd(); }, 4000);
       },

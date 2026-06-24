@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, StatusBar, Alert, Platform,
+  View, Text, TouchableOpacity, StyleSheet, StatusBar, Alert, Platform, Linking,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import * as SplashScreen from 'expo-splash-screen';
 
 import StationMap from './components/StationMap';
@@ -62,6 +63,8 @@ function AppInner() {
   const [sheetIndex, setSheetIndex] = useState(1);
   const [searching, setSearching] = useState(false);
   const [navTrip, setNavTrip] = useState(null);
+  const [locStatus, setLocStatus] = useState('granted'); // 'granted' | 'denied' | 'unavailable'
+  const [recenterTick, setRecenterTick] = useState(0);
   const timer = useRef(null);
   const migrated = useRef(false);
 
@@ -76,12 +79,31 @@ function AppInner() {
   useEffect(() => {
     (async () => {
       const [loc, pl, un] = await Promise.all([getLocation(), loadPlaces(), loadUnits()]);
-      setCenter(loc); setPlaces(pl); setUnits(un); await refresh();
+      setCenter({ lat: loc.lat, lon: loc.lon }); setLocStatus(loc.status);
+      setPlaces(pl); setUnits(un); await refresh();
       SplashScreen.hideAsync().catch(() => {});
+      // The native map seeds its region from the Midtown default at mount; once we
+      // have a real fix, recenter on it so the user-location dot is actually in view.
+      if (!loc.fallback) setRecenterTick((t) => t + 1);
     })();
     timer.current = setInterval(refresh, REFRESH_MS);
     return () => clearInterval(timer.current);
   }, [refresh]);
+
+  // Locate button: re-fetch the user's position and recenter the map. If
+  // permission is denied (iOS won't re-prompt once denied), send them to Settings.
+  const recenter = useCallback(async () => {
+    const loc = await getLocation();
+    setLocStatus(loc.status);
+    if (loc.fallback) {
+      Linking.openSettings().catch(() => {});
+      return;
+    }
+    setCenter({ lat: loc.lat, lon: loc.lon });
+    setRecenterTick((t) => t + 1);
+  }, []);
+
+  const openLocationSettings = useCallback(() => { Linking.openSettings().catch(() => {}); }, []);
 
   // Once stations arrive, run the one-time migration from the old home/work model.
   useEffect(() => {
@@ -172,8 +194,33 @@ function AppInner() {
     <View style={styles.root}>
       <StatusBar barStyle={c.scheme === 'dark' ? 'light-content' : 'dark-content'} />
 
-      <StationMap stations={all} center={center} mode={mode} bikeType={bikeType} selectedId={selectedId} onSelect={(s) => { setSelectedId(s.id); setChartId(s.id); }} />
+      <StationMap stations={all} center={center} mode={mode} bikeType={bikeType} selectedId={selectedId} recenterTick={recenterTick} onSelect={(s) => { setSelectedId(s.id); setChartId(s.id); }} />
 
+      {locStatus !== 'granted' && (
+        <TouchableOpacity
+          style={[styles.locBanner, { top: insets.top + 10 }]}
+          onPress={openLocationSettings}
+          activeOpacity={0.85}
+        >
+          <Ionicons name="location-outline" size={15} color={c.onPrimary} />
+          <Text style={styles.locBannerTxt} numberOfLines={1}>
+            Location off — showing Midtown. Tap to enable.
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      <TouchableOpacity
+        style={[styles.locBtn, { top: insets.top + 10 }]}
+        onPress={recenter}
+        activeOpacity={0.85}
+        hitSlop={8}
+      >
+        <Ionicons
+          name={locStatus === 'granted' ? 'locate' : 'locate-outline'}
+          size={20}
+          color={locStatus === 'granted' ? c.nav : c.textMute}
+        />
+      </TouchableOpacity>
 
       <BottomSheet index={sheetIndex} onIndexChange={setSheetIndex} renderHeader={Header} bottomInset={insets.bottom}>
         {searching ? (
@@ -208,6 +255,20 @@ function makeStyles(c) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: c.bg },
     dot: { width: 7, height: 7, borderRadius: 4 },
+
+    // Floating "recenter on me" button, top-right over the map.
+    locBtn: {
+      position: 'absolute', right: 12, width: 42, height: 42, borderRadius: 21,
+      backgroundColor: c.elevated, alignItems: 'center', justifyContent: 'center',
+      borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, ...shadow(c).card,
+    },
+    // "Location off" banner, top-left, leaving room for the locate button.
+    locBanner: {
+      position: 'absolute', left: 12, right: 64, flexDirection: 'row', alignItems: 'center', gap: 6,
+      backgroundColor: c.primary, borderRadius: radius.pill, paddingVertical: 8, paddingHorizontal: 12,
+      ...shadow(c).card,
+    },
+    locBannerTxt: { color: c.onPrimary, fontSize: 12, fontWeight: '600', flexShrink: 1 },
     statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     headTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     betaPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: c.primary, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 4, marginRight: 8 },

@@ -14,11 +14,13 @@ workflow to Claude Code.)
 
 ## Voice (deferred threads — original complaints)
 
-- [ ] **Better voice.** Switch off the default compact iOS voice to an enhanced / Siri on-device
-      voice; nudge rate to ~0.95. Free quality jump, no network.
-- [ ] **Cleaner phrasing.** A rewrite layer turning raw provider maneuvers ("Head southwest on
-      1st Ave toward…") into natural cycling instructions, plus a proper arrival bookend that
-      names the place ("You've arrived at Life Time").
+- [x] **Better voice.** `voiceNav.js` now resolves the best installed en-US voice (Enhanced/
+      premium if downloaded, else system default) once per session and speaks at rate 0.95
+      (`VOICE` in `lib/config.js`). Needs a device pass to confirm the enhanced voice is picked.
+- [x] **Cleaner phrasing.** `lib/navPhrasing.js` — `phrase()` expands street abbreviations
+      (St→Street, with St→Saint for leading names) + trims provider verbosity; applied in
+      `routingGoogle.js`/`routingOrs.js`. `arrivalLine()` names the place ("You've arrived at
+      Life Time"), wired into `TripScreen` (dest waypoint) + `NavScreen` (banner).
 
 ## Nav loose end
 

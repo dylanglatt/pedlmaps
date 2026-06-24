@@ -8,6 +8,7 @@ import SavedPlacesRow from './SavedPlacesRow';
 import FavoritesManager from './FavoritesManager';
 import ReorderPair from './ReorderPair';
 import { directions, WALK, BIKE } from '../lib/routing';
+import { arrivalLine } from '../lib/navPhrasing';
 import { autocomplete, placeDetails } from '../lib/places';
 import { planTrip, planMultiTrip, fmtMin, fmtMiles } from '../lib/tripPlanner';
 import { getLocation } from '../lib/location';
@@ -54,7 +55,8 @@ async function buildRoute(origin, oStation, dStation, dest, opts = {}) {
   // itself, instead of relying on the last walking maneuver landing in range.
   if (opts.finalDest) {
     const at = (dest && dest.lat != null) ? [dest.lat, dest.lon] : coords[coords.length - 1];
-    maneuvers.push({ instruction: 'You have arrived.', location: at, distance: 0, kind: 'dest' });
+    const name = dest && !dest.current ? (dest.name || dest.label) : null;
+    maneuvers.push({ instruction: arrivalLine(name), location: at, distance: 0, kind: 'dest' });
   }
   return { maneuvers, coords };
 }
