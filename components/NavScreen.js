@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, Modal, Switch,
+  View, Text, TouchableOpacity, StyleSheet, Modal, Switch, ScrollView, Dimensions,
   PanResponder, LayoutAnimation, UIManager, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -8,7 +8,7 @@ import Svg, { Path, Circle } from 'react-native-svg';
 import Icon from './Icon';
 import RouteMap from './RouteMap';
 import { nav } from '../lib/voiceNav';
-import { arrivalLine } from '../lib/navPhrasing';
+import { arrivalLine, continuation, shortInstruction } from '../lib/navPhrasing';
 import { fmtMiles } from '../lib/tripPlanner';
 import { formatClock } from '../lib/geo';
 import { useTheme, radius, shadow } from '../lib/theme';
@@ -55,6 +55,71 @@ function fmtDist(m) {
   return `${(m / 1609.34).toFixed(1)} mi`;
 }
 
+const WIN_H = Dimensions.get('window').height;
+
+function destName(dest) {
+  return dest && !dest.current ? (dest.name || dest.label || 'your destination') : 'your destination';
+}
+
+// Icon + color per segment row, reusing the map's marker vocabulary.
+const ROW = {
+  walk: { icon: 'walk', color: '#fff' },
+  ride: { icon: 'bike', color: 'good' },
+  dock: { icon: 'dock', color: 'dock' },
+  stop: { icon: 'pin', color: 'primary' },
+  dest: { icon: 'flag', color: 'danger' },
+};
+
+// Condense the flat maneuver list into a high-level itinerary: one row per leg —
+// Walk to your pickup station / Bike ride / Dock your bike / Walk to <dest> /
+// Arrive. Each row carries the maneuver index range it spans so the live current
+// step still highlights the right row. Turn-by-turn lives in the banner.
+function buildSteps(maneuvers, dest, stations = {}) {
+  const ms = maneuvers || [];
+  const pickups = stations.pickups || []; // station names in order of use
+  const docks = stations.docks || [];
+  let pIdx = 0, dIdx = 0;
+  const out = [];
+  let mode = 'walk';
+  let walk = null; // { fromIdx, toIdx, distance }
+  let bike = null; // { fromIdx, toIdx, distance }
+  const flushWalk = (label) => {
+    if (walk) { out.push({ kind: 'walk', label, distance: walk.distance, fromIdx: walk.fromIdx, toIdx: walk.toIdx }); walk = null; }
+  };
+  const flushBike = () => {
+    if (bike) { out.push({ kind: 'ride', label: 'Bike ride', distance: bike.distance, fromIdx: bike.fromIdx, toIdx: bike.toIdx }); bike = null; }
+  };
+  for (let i = 0; i < ms.length; i++) {
+    const m = ms[i];
+    if (m.kind === 'pickup') {
+      const pn = pickups[pIdx++];
+      flushWalk(pn ? `Walk to ${pn}` : 'Walk to your pickup station');
+      bike = { fromIdx: i, toIdx: i, distance: 0 }; // ride starts at the undock
+      mode = 'bike';
+    } else if (m.kind === 'dock') {
+      const dn = docks[dIdx++];
+      flushBike();
+      out.push({ kind: 'dock', label: dn ? `Dock at ${dn}` : 'Dock your bike', fromIdx: i, toIdx: i });
+      mode = 'walk';
+    } else if (m.kind === 'stop') {
+      flushWalk('Walk to your stop'); flushBike();
+      out.push({ kind: 'stop', label: 'Stop', fromIdx: i, toIdx: i });
+      mode = 'walk';
+    } else if (m.kind === 'dest') {
+      flushWalk(`Walk to ${destName(dest)}`); flushBike();
+      out.push({ kind: 'dest', label: `Arrive at ${destName(dest)}`, fromIdx: i, toIdx: i });
+    } else if (mode === 'bike') {
+      if (!bike) bike = { fromIdx: i, toIdx: i, distance: 0 };
+      bike.toIdx = i; bike.distance += (m.distance || 0);
+    } else {
+      if (!walk) walk = { fromIdx: i, toIdx: i, distance: 0 };
+      walk.toIdx = i; walk.distance += (m.distance || 0);
+    }
+  }
+  flushWalk(`Walk to ${destName(dest)}`); flushBike();
+  return out;
+}
+
 export default function NavScreen({ trip, onEnd }) {
   const c = useTheme();
   const insets = useSafeAreaInsets();
@@ -67,6 +132,8 @@ export default function NavScreen({ trip, onEnd }) {
   const [here, setHere] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const [overview, setOverview] = useState(false);
+  const [stepsOpen, setStepsOpen] = useState(false); // banner expanded into full step list
+  const [curIndex, setCurIndex] = useState(0);
   const [voiceOn, setVoiceOn] = useState(!nav.muted);
   const arrival = useRef(new Date(Date.now() + plan.totalSec * 1000)).current;
   const [minLeft, setMinLeft] = useState(Math.max(1, Math.round(plan.totalSec / 60)));
@@ -77,7 +144,7 @@ export default function NavScreen({ trip, onEnd }) {
       maneuvers: route.maneuvers,
       routeCoords: route.coords,
       intro: `Starting route to ${dest?.name || dest?.label || 'your destination'}.`,
-      onProgress: ({ maneuver, next: nx, distance }) => { setCur(maneuver); setNext(nx); setDist(distance); },
+      onProgress: ({ maneuver, next: nx, distance, index }) => { setCur(maneuver); setNext(nx); setDist(distance); if (typeof index === 'number') setCurIndex(index); },
       onLocationUpdate: (h) => setHere(h),
       onArrive: () => {
         setCur({ instruction: arrivalLine(dest && !dest.current ? (dest.name || dest.label) : null) }); setNext(null); setDist(null);
@@ -125,30 +192,66 @@ export default function NavScreen({ trip, onEnd }) {
     if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.danger, kind: 'dest' });
   }
   const distLabel = fmtDist(dist);
+  const stationNames = useMemo(() => {
+    const segs = plan.segments || [{ originStation: plan.originStation, destStation: plan.destStation }];
+    return {
+      pickups: segs.map((s) => s.originStation && s.originStation.name),
+      docks: segs.map((s) => s.destStation && s.destStation.name),
+    };
+  }, [plan]);
+  const steps = useMemo(() => buildSteps(route.maneuvers, dest, stationNames), [route, dest, stationNames]);
 
   return (
     <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={() => { nav.stop(); onEnd && onEnd(); }}>
       <View style={styles.root}>
         <RouteMap coords={route.coords} markers={markers} fill follow={overview ? null : here} overview={overview} showUser ink={c.nav} paper="#fff" />
 
-        {/* Top maneuver banner */}
+        {/* Top maneuver banner — tap to expand into the full step list */}
         <View style={[styles.banner, { top: insets.top + 8 }]}>
-          <View style={styles.bannerMain}>
-            <Icon name={manIcon(cur)} size={30} color="#fff" weight="semibold" />
-            <View style={styles.flex}>
-              {distLabel && <Text style={styles.bannerDist}>{distLabel}</Text>}
-              <Text style={styles.bannerTxt} numberOfLines={2}>{cur?.instruction || 'Starting…'}</Text>
-            </View>
-          </View>
-          {next && (
-            <View style={styles.bannerNext}>
-              <Icon name={manIcon(next)} size={15} color="rgba(255,255,255,0.7)" />
-              <Text style={styles.bannerNextTxt} numberOfLines={1}>Then {next.instruction}</Text>
-            </View>
+          {stepsOpen ? (
+            <>
+              <TouchableOpacity onPress={() => setStepsOpen(false)} activeOpacity={0.8} style={styles.stepsGrip} hitSlop={8}>
+                <View style={styles.stepsHandle} />
+              </TouchableOpacity>
+              <ScrollView style={{ maxHeight: Math.round(WIN_H * 0.6) }} showsVerticalScrollIndicator={false}>
+                {steps.map((it, k) => {
+                  const r = ROW[it.kind] || ROW.walk;
+                  const color = r.color === '#fff' ? '#fff' : c[r.color];
+                  const isCur = curIndex >= it.fromIdx && curIndex <= it.toIdx;
+                  const isPast = curIndex > it.toIdx;
+                  const dl = (it.kind === 'walk' || it.kind === 'ride') ? fmtDist(it.distance) : null;
+                  return (
+                    <View key={k} style={[styles.stepRow, isCur && styles.stepRowCur]}>
+                      <Icon name={r.icon} size={20} color={color} />
+                      <Text style={[styles.stepInstr, isPast && styles.stepPast]} numberOfLines={1}>{it.label}</Text>
+                      {!!dl && <Text style={styles.stepDist}>{dl}</Text>}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            </>
+          ) : (
+            <TouchableOpacity activeOpacity={0.9} onPress={() => setStepsOpen(true)}>
+              <View style={styles.bannerMain}>
+                <Icon name={manIcon(cur)} size={30} color="#fff" weight="semibold" />
+                <View style={styles.flex}>
+                  {distLabel && <Text style={styles.bannerDist}>{distLabel}</Text>}
+                  <Text style={styles.bannerTxt} numberOfLines={2}>{shortInstruction(cur?.instruction) || 'Starting…'}</Text>
+                </View>
+                <Icon name="forward" size={16} color="rgba(255,255,255,0.45)" />
+              </View>
+              {next && (
+                <View style={styles.bannerNext}>
+                  <Icon name={manIcon(next)} size={15} color="rgba(255,255,255,0.7)" />
+                  <Text style={styles.bannerNextTxt} numberOfLines={1}>Then {continuation(next.instruction)}</Text>
+                </View>
+              )}
+            </TouchableOpacity>
           )}
         </View>
 
         {/* Floating map controls */}
+        {!stepsOpen && (
         <View style={styles.fab}>
           <TouchableOpacity style={styles.fabBtn} onPress={() => setOverview((o) => !o)} activeOpacity={0.7}>
             <RouteIcon color={overview ? c.primary : c.text} size={22} />
@@ -158,6 +261,7 @@ export default function NavScreen({ trip, onEnd }) {
             <Icon name={voiceOn ? 'volumeOn' : 'volumeOff'} size={20} color={voiceOn ? c.primary : c.textMute} />
           </TouchableOpacity>
         </View>
+        )}
 
         {/* Bottom swipe-up panel */}
         <View style={[styles.bottom, { paddingBottom: insets.bottom + 14 }]}>
@@ -225,6 +329,15 @@ function makeStyles(c) {
     bannerTxt: { color: '#fff', fontSize: 20, fontWeight: '800' },
     bannerNext: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
     bannerNextTxt: { color: 'rgba(255,255,255,0.75)', fontSize: 14, fontWeight: '500', flex: 1 },
+
+    // Expanded step list (banner tapped open)
+    stepsGrip: { alignItems: 'center', paddingBottom: 8 },
+    stepsHandle: { width: 40, height: 5, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.28)' },
+    stepRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 11, paddingHorizontal: 6, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: 'rgba(255,255,255,0.08)' },
+    stepRowCur: { backgroundColor: 'rgba(255,255,255,0.07)', borderRadius: 10, borderTopWidth: 0 },
+    stepInstr: { flex: 1, color: '#fff', fontSize: 14, fontWeight: '500' },
+    stepPast: { color: 'rgba(255,255,255,0.45)' },
+    stepDist: { color: 'rgba(255,255,255,0.6)', fontSize: 13, fontWeight: '500', fontVariant: ['tabular-nums'] },
 
     fab: { position: 'absolute', right: 14, top: '42%', backgroundColor: c.elevated, borderRadius: radius.lg, borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, overflow: 'hidden', ...shadow(c).card },
     fabBtn: { width: 46, height: 46, alignItems: 'center', justifyContent: 'center' },
