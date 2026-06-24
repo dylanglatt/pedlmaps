@@ -406,8 +406,8 @@ export default function TripScreen({ stations, onStartNav }) {
         <View style={styles.odDivider} />
         {stop ? (
           <ReorderPair
-            top={{ name: stop.name, num: 1, color: c.primary, onPress: openStop, onRemove: removeStop }}
-            bottom={{ name: dest?.name, icon: 'flag', color: c.danger, onPress: () => editField('to') }}
+            top={{ name: stop.name, icon: 'dot', color: c.primary, onPress: openStop, onRemove: removeStop }}
+            bottom={{ name: dest?.name, icon: 'dot', color: c.danger, onPress: () => editField('to') }}
             onSwap={swapStopDest}
             onDragStart={() => setDragging(true)}
             onDragEnd={() => setDragging(false)}
