@@ -34,7 +34,7 @@ const buzz = (s) => { if (Haptics && Platform.OS !== 'web') Haptics.impactAsync(
 const lonlat = (p) => [p.lon, p.lat];
 const CURRENT = () => ({ name: 'My Location', current: true });
 
-async function buildRoute(origin, oStation, dStation, dest) {
+async function buildRoute(origin, oStation, dStation, dest, opts = {}) {
   const legs = await Promise.all([
     directions(WALK, [lonlat(origin), lonlat(oStation)]),
     directions(BIKE, [lonlat(oStation), lonlat(dStation)]),
@@ -43,11 +43,19 @@ async function buildRoute(origin, oStation, dStation, dest) {
   const maneuvers = [];
   const coords = [];
   legs.forEach((leg, i) => {
-    if (i === 1) maneuvers.push({ instruction: 'Undock your bike and start riding.', location: leg.maneuvers[0]?.location || coords[coords.length - 1], distance: 0 });
-    if (i === 2) maneuvers.push({ instruction: 'Dock your bike, then walk to your destination.', location: leg.maneuvers[0]?.location || coords[coords.length - 1], distance: 0 });
+    // Leg-boundary cues are WAYPOINTS (kind set) — voiceNav gives them robust
+    // geofence arrival detection, not the brittle turn-proximity path.
+    if (i === 1) maneuvers.push({ instruction: 'Undock your bike and start riding.', location: leg.maneuvers[0]?.location || coords[coords.length - 1], distance: 0, kind: 'pickup' });
+    if (i === 2) maneuvers.push({ instruction: 'Dock your bike, then walk to your destination.', location: leg.maneuvers[0]?.location || coords[coords.length - 1], distance: 0, kind: 'dock' });
     maneuvers.push(...leg.maneuvers);
     coords.push(...leg.coords);
   });
+  // Explicit final-destination waypoint so arrival is detected + the route ends
+  // itself, instead of relying on the last walking maneuver landing in range.
+  if (opts.finalDest) {
+    const at = (dest && dest.lat != null) ? [dest.lat, dest.lon] : coords[coords.length - 1];
+    maneuvers.push({ instruction: 'You have arrived.', location: at, distance: 0, kind: 'dest' });
+  }
   return { maneuvers, coords };
 }
 
@@ -58,9 +66,9 @@ async function buildMultiRoute(points, segments) {
   const coords = [];
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
-    const r = await buildRoute(points[i], seg.originStation, seg.destStation, points[i + 1]);
+    const r = await buildRoute(points[i], seg.originStation, seg.destStation, points[i + 1], { finalDest: i === segments.length - 1 });
     if (i > 0) {
-      maneuvers.push({ instruction: `Stop at ${points[i].name || 'your stop'}. Tap when ready to continue.`, location: r.coords[0] || coords[coords.length - 1], distance: 0 });
+      maneuvers.push({ instruction: `Stop at ${points[i].name || 'your stop'}. Tap when ready to continue.`, location: r.coords[0] || coords[coords.length - 1], distance: 0, kind: 'stop' });
     }
     maneuvers.push(...r.maneuvers);
     coords.push(...r.coords);
@@ -117,7 +125,7 @@ export default function TripScreen({ stations, onStartNav }) {
       if (clean.length === 0) {
         const { best } = await planTrip({ origin: org, dest: d, stations, prefer: pref });
         setPlan({ ...best, kind: 'single' });
-        try { setRoute(await buildRoute(org, best.originStation, best.destStation, d)); }
+        try { setRoute(await buildRoute(org, best.originStation, best.destStation, d, { finalDest: true })); }
         catch { setRoute(null); }
       } else {
         const pts = [org, ...clean, d];
@@ -244,7 +252,7 @@ export default function TripScreen({ stations, onStartNav }) {
     let r = route;
     if (!r) {
       setBusy(true);
-      try { r = await buildRoute(origin, current.originStation, current.destStation, dest); }
+      try { r = await buildRoute(origin, current.originStation, current.destStation, dest, { finalDest: true }); }
       catch (e) { setError(e.message || 'Could not start'); setBusy(false); return; }
       setBusy(false);
     }

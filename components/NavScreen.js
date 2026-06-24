@@ -78,7 +78,11 @@ export default function NavScreen({ trip, onEnd }) {
       intro: `Starting route to ${dest?.name || dest?.label || 'your destination'}.`,
       onProgress: ({ maneuver, next: nx, distance }) => { setCur(maneuver); setNext(nx); setDist(distance); },
       onLocationUpdate: (h) => setHere(h),
-      onArrive: () => { setCur({ instruction: 'You have arrived.' }); setNext(null); setDist(null); },
+      onArrive: () => {
+        setCur({ instruction: 'You have arrived.' }); setNext(null); setDist(null);
+        // Let the spoken "You have arrived" land, then close the route itself.
+        setTimeout(() => { onEnd && onEnd(); }, 4000);
+      },
     });
     tick.current = setInterval(() => {
       setMinLeft(Math.max(0, Math.round((arrival.getTime() - Date.now()) / 60000)));
