@@ -210,7 +210,7 @@ export default function NavScreen({ trip, onEnd }) {
         <View style={[styles.banner, { top: insets.top + 8 }]}>
           {stepsOpen ? (
             <>
-              <TouchableOpacity onPress={() => setStepsOpen(false)} activeOpacity={0.8} style={styles.stepsGrip} hitSlop={8}>
+              <TouchableOpacity onPress={() => setStepsOpen(false)} activeOpacity={0.8} style={styles.stepsGrip} hitSlop={8} accessibilityRole="button" accessibilityLabel="Hide all steps">
                 <View style={styles.stepsHandle} />
               </TouchableOpacity>
               <ScrollView style={{ maxHeight: Math.round(WIN_H * 0.6) }} showsVerticalScrollIndicator={false}>
@@ -231,7 +231,7 @@ export default function NavScreen({ trip, onEnd }) {
               </ScrollView>
             </>
           ) : (
-            <TouchableOpacity activeOpacity={0.9} onPress={() => setStepsOpen(true)}>
+            <TouchableOpacity activeOpacity={0.9} onPress={() => setStepsOpen(true)} accessibilityRole="button" accessibilityLabel="Show all steps">
               <View style={styles.bannerMain}>
                 <Icon name={manIcon(cur)} size={30} color="#fff" weight="semibold" />
                 <View style={styles.flex}>
@@ -253,11 +253,11 @@ export default function NavScreen({ trip, onEnd }) {
         {/* Floating map controls */}
         {!stepsOpen && (
         <View style={styles.fab}>
-          <TouchableOpacity style={styles.fabBtn} onPress={() => setOverview((o) => !o)} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.fabBtn} onPress={() => setOverview((o) => !o)} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={overview ? 'Follow my location' : 'Show route overview'}>
             <RouteIcon color={overview ? c.primary : c.text} size={22} />
           </TouchableOpacity>
           <View style={styles.fabSep} />
-          <TouchableOpacity style={styles.fabBtn} onPress={() => setVoice(!voiceOn)} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.fabBtn} onPress={() => setVoice(!voiceOn)} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={voiceOn ? 'Mute voice guidance' : 'Unmute voice guidance'}>
             <Icon name={voiceOn ? 'volumeOn' : 'volumeOff'} size={20} color={voiceOn ? c.primary : c.textMute} />
           </TouchableOpacity>
         </View>

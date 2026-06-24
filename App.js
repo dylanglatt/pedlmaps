@@ -18,7 +18,8 @@ import Icon from './components/Icon';
 import { fetchStations, nearest } from './lib/gbfs';
 import { getLocation, watchLocation, DEFAULT_CENTER } from './lib/location';
 import { loadPlaces, addPlace, removePlace, setFlipMode, makePlace, migrateLegacy } from './lib/savedPlaces';
-import { loadUnits, saveUnits } from './lib/storage';
+import { loadUnits, saveUnits, loadOnboarded, saveOnboarded } from './lib/storage';
+import FirstRun from './components/FirstRun';
 import { formatAge } from './lib/geo';
 import { useTheme, radius, shadow } from './lib/theme';
 
@@ -36,6 +37,11 @@ function promptNickname(defaultName, cb) {
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 const REFRESH_MS = 45000;
+
+// Dev-only: force the first-run primer to show on every launch while you iterate
+// on its design (so you don't have to reinstall to clear the onboarded flag).
+// __DEV__-gated, so production builds are NEVER affected. Flip to `&& false` when done.
+const FORCE_PRIMER = __DEV__ && false;
 
 export default function App() {
   return (
@@ -66,6 +72,7 @@ function AppInner() {
   const [locStatus, setLocStatus] = useState('granted'); // 'granted' | 'denied' | 'unavailable'
   const [recenterTick, setRecenterTick] = useState(0);
   const [userLoc, setUserLoc] = useState(null); // live device position for the map dot (null = unknown)
+  const [showPrimer, setShowPrimer] = useState(false); // first-run welcome/permission primer
   const timer = useRef(null);
   const watchStop = useRef(null);
   const migrated = useRef(false);
@@ -78,21 +85,33 @@ function AppInner() {
     finally { setLoading(false); }
   }, []);
 
+  // Request location, drop the dot, recenter, and start the live watch. Called on
+  // launch for returning users, or after the first-run primer for new ones — so
+  // the OS prompt always has on-screen context.
+  const initLocation = useCallback(async () => {
+    const loc = await getLocation();
+    setCenter({ lat: loc.lat, lon: loc.lon }); setLocStatus(loc.status);
+    if (!loc.fallback) { setUserLoc({ lat: loc.lat, lon: loc.lon }); setRecenterTick((t) => t + 1); }
+    watchStop.current = await watchLocation((p) => { setUserLoc(p); setLocStatus('granted'); });
+  }, []);
+
   useEffect(() => {
     (async () => {
-      const [loc, pl, un] = await Promise.all([getLocation(), loadPlaces(), loadUnits()]);
-      setCenter({ lat: loc.lat, lon: loc.lon }); setLocStatus(loc.status);
+      const [pl, un, onboarded] = await Promise.all([loadPlaces(), loadUnits(), loadOnboarded()]);
       setPlaces(pl); setUnits(un); await refresh();
       SplashScreen.hideAsync().catch(() => {});
-      // The native map seeds its region from the Midtown default at mount; once we
-      // have a real fix, drop the dot there and recenter so it's actually in view.
-      if (!loc.fallback) { setUserLoc({ lat: loc.lat, lon: loc.lon }); setRecenterTick((t) => t + 1); }
-      // Keep the dot live while browsing (no re-prompt; no-ops if not granted).
-      watchStop.current = await watchLocation((p) => { setUserLoc(p); setLocStatus('granted'); });
+      if (onboarded && !FORCE_PRIMER) initLocation();
+      else setShowPrimer(true); // defer the OS location prompt until they tap "Get started"
     })();
     timer.current = setInterval(refresh, REFRESH_MS);
     return () => { clearInterval(timer.current); if (watchStop.current) watchStop.current(); };
-  }, [refresh]);
+  }, [refresh, initLocation]);
+
+  const finishPrimer = useCallback(async () => {
+    setShowPrimer(false);
+    await saveOnboarded();
+    initLocation();
+  }, [initLocation]);
 
   // Locate button: re-fetch the user's position and recenter the map. If
   // permission is denied (iOS won't re-prompt once denied), send them to Settings.
@@ -140,7 +159,7 @@ function AppInner() {
       <View style={styles.planHead}>
         <View style={styles.titleRow}>
           <Text style={styles.planTitle}>Plan a trip</Text>
-          <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Plan a trip')} activeOpacity={0.8} hitSlop={6}>
+          <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Plan a trip')} activeOpacity={0.8} hitSlop={6} accessibilityRole="button" accessibilityLabel="Send feedback">
             <Icon name="chat" size={11} color={c.onPrimary} />
             <Text style={styles.betaTxt}>BETA</Text>
           </TouchableOpacity>
@@ -152,7 +171,7 @@ function AppInner() {
     ) : (
       <View style={styles.browseHead}>
         <View style={styles.headTop}>
-          <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Nearby')} activeOpacity={0.8} hitSlop={6}>
+          <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Nearby')} activeOpacity={0.8} hitSlop={6} accessibilityRole="button" accessibilityLabel="Send feedback">
             <Icon name="chat" size={11} color={c.onPrimary} />
             <Text style={styles.betaTxt}>BETA</Text>
           </TouchableOpacity>
@@ -206,6 +225,8 @@ function AppInner() {
           style={[styles.locBanner, { top: insets.top + 10 }]}
           onPress={openLocationSettings}
           activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Location is off. Open Settings to enable."
         >
           <Ionicons name="location-outline" size={15} color={c.onPrimary} />
           <Text style={styles.locBannerTxt} numberOfLines={1}>
@@ -219,6 +240,8 @@ function AppInner() {
         onPress={recenter}
         activeOpacity={0.85}
         hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={locStatus === 'granted' ? 'Recenter on my location' : 'Enable location access'}
       >
         <Ionicons
           name={locStatus === 'granted' ? 'locate' : 'locate-outline'}
@@ -252,6 +275,8 @@ function AppInner() {
       {navTrip && <NavScreen trip={navTrip} onEnd={() => setNavTrip(null)} />}
 
       <Feedback visible={!!feedback} screen={feedback} onClose={() => setFeedback(null)} />
+
+      <FirstRun visible={showPrimer} onDone={finishPrimer} />
     </View>
   );
 }

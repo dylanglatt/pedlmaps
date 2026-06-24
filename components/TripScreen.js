@@ -216,6 +216,11 @@ export default function TripScreen({ stations, onStartNav }) {
     if (origin && dest) runPlan(origin, stop ? [stop] : [], dest, p);
   }, [origin, dest, stop, runPlan]);
 
+  // Re-run the current plan after a failure (network blip, no bike/dock, etc.).
+  const retryPlan = useCallback(() => {
+    if (origin && dest) runPlan(origin, stop ? [stop] : [], dest, prefer);
+  }, [origin, dest, stop, prefer, runPlan]);
+
   // Single stop (cap 1): open the search to add/edit it, or remove it.
   const openStop = useCallback(() => { setEditing('stop'); setQuery(''); setSugs([]); setPhase('search'); }, []);
   const removeStop = useCallback(() => {
@@ -422,7 +427,15 @@ export default function TripScreen({ stations, onStartNav }) {
       </View>
 
       {busy && <ActivityIndicator color={c.primary} style={{ marginTop: 20 }} />}
-      {error && <View style={styles.errRow}><Icon name="warning" size={14} color={c.danger} /><Text style={styles.err}>{error}</Text></View>}
+      {error && !busy && (
+        <View style={styles.errRow}>
+          <Icon name="warning" size={14} color={c.danger} />
+          <Text style={styles.err}>{error}</Text>
+          <TouchableOpacity onPress={retryPlan} hitSlop={8} accessibilityRole="button" accessibilityLabel="Try again">
+            <Text style={styles.retry}>Try again</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {markers.length > 0 && <View style={{ marginTop: 14 }}><RouteMap coords={route?.coords} markers={markers} ink={c.nav} paper="#fff" /></View>}
 
@@ -562,6 +575,7 @@ function makeStyles(c) {
     prefTxtOn: { color: c.text },
     errRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginHorizontal: 16 },
     err: { color: c.danger, fontSize: 13, fontWeight: '600', flex: 1 },
+    retry: { color: c.primary, fontSize: 13, fontWeight: '700' },
 
     bestCard: { borderRadius: radius.lg, padding: 16, marginTop: 14, marginHorizontal: 16, backgroundColor: c.elevated, borderWidth: 1, borderColor: c.border, ...shadow(c).card },
     bestTop: { flexDirection: 'row', alignItems: 'center' },
