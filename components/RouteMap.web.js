@@ -28,7 +28,7 @@ function markerHtml(m, paper) {
   if (m.kind === 'stop')
     return `<div style="min-width:24px;height:24px;padding:0 4px;border-radius:7px;background:${m.color};color:${paper};font:800 13px/1 sans-serif;${ring}">${m.num ?? ''}</div>`;
   if (m.kind === 'dest')
-    return `<div style="width:24px;height:24px;border-radius:7px;background:${m.color};color:${paper};font:800 13px/1 sans-serif;${ring}">⚑</div>`;
+    return `<svg width="22" height="29" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg"><path d="M12 1C6.477 1 2 5.477 2 11c0 6 10 20 10 20s10-14 10-20C22 5.477 17.523 1 12 1z" fill="${m.color}" stroke="${paper}" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="11" r="3.6" fill="${paper}"/></svg>`;
   if (m.kind === 'pickup')
     return `<div style="width:20px;height:20px;border-radius:50%;background:${m.color};color:#fff;font:700 12px/1 sans-serif;${ring}">🚲</div>`;
   if (m.kind === 'dock')
@@ -60,7 +60,13 @@ export default function RouteMap({
           <Marker
             key={i}
             position={[m.lat, m.lon]}
-            icon={L.divIcon({ html: markerHtml(m, paper), className: '', iconSize: [26, 26], iconAnchor: [13, 13] })}
+            icon={L.divIcon({
+              html: markerHtml(m, paper),
+              className: '',
+              // the dest pin is taller and anchors at its tip; others stay centered
+              iconSize: m.kind === 'dest' ? [22, 29] : [26, 26],
+              iconAnchor: m.kind === 'dest' ? [11, 28] : [13, 13],
+            })}
           >
             <Popup>{m.title}</Popup>
           </Marker>

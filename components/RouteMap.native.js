@@ -1,6 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { StyleSheet, View, Text } from 'react-native';
 import MapView, { Polyline, Marker, PROVIDER_DEFAULT } from 'react-native-maps';
+import Svg, { Path, Circle } from 'react-native-svg';
 import Icon from './Icon';
 
 // Route polyline + markers. `fill` makes it full-bleed; `follow` recenters on a
@@ -51,7 +52,9 @@ export default function RouteMap({
           key={i}
           coordinate={{ latitude: m.lat, longitude: m.lon }}
           title={m.title}
-          anchor={{ x: 0.5, y: 0.5 }}
+          // the destination pin points with its tip, so anchor it at the bottom;
+          // every other glyph is centered on its point
+          anchor={m.kind === 'dest' ? { x: 0.5, y: 1 } : { x: 0.5, y: 0.5 }}
         >
           <MarkerGlyph m={m} paper={paper} />
         </Marker>
@@ -61,7 +64,7 @@ export default function RouteMap({
 }
 
 // Two-tier marker vocabulary: places (origin dot, numbered stop square, dest
-// flag square) read big and dark; bike stations (green bike chip, red "P" chip)
+// pin) read big and dark; bike stations (green bike chip, red "P" chip)
 // are smaller and subordinate. Every marker gets a paper-colored ring + shadow.
 function MarkerGlyph({ m, paper }) {
   const ring = { borderColor: paper };
@@ -75,11 +78,7 @@ function MarkerGlyph({ m, paper }) {
         </View>
       );
     case 'dest':
-      return (
-        <View style={[styles.sq, { backgroundColor: m.color }, ring]}>
-          <Icon name="flag" size={13} color={paper} />
-        </View>
-      );
+      return <Pin color={m.color} paper={paper} />;
     case 'pickup':
       return (
         <View style={[styles.chip, { backgroundColor: m.color }, ring]}>
@@ -95,6 +94,23 @@ function MarkerGlyph({ m, paper }) {
     default:
       return <View style={[styles.dot, { backgroundColor: m.color }, ring]} />;
   }
+}
+
+// Apple-style destination pin: red teardrop with a white casing + center dot,
+// tip pointing at the exact coordinate.
+function Pin({ color, paper }) {
+  return (
+    <Svg width={22} height={29} viewBox="0 0 24 32">
+      <Path
+        d="M12 1C6.477 1 2 5.477 2 11c0 6 10 20 10 20s10-14 10-20C22 5.477 17.523 1 12 1z"
+        fill={color}
+        stroke={paper}
+        strokeWidth={2}
+        strokeLinejoin="round"
+      />
+      <Circle cx="12" cy="11" r="3.6" fill={paper} />
+    </Svg>
+  );
 }
 
 function region(coords) {
