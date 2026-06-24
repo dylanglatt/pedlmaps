@@ -12,7 +12,8 @@ import { arrivalLine } from '../lib/navPhrasing';
 import { autocomplete, placeDetails } from '../lib/places';
 import { planTrip, planMultiTrip, fmtMin, fmtMiles } from '../lib/tripPlanner';
 import { getLocation } from '../lib/location';
-import { loadRecents, addRecent, removeRecent, clearRecents } from '../lib/storage';
+import { loadRecents, addRecent, removeRecent, clearRecents, loadMembership, saveMembership } from '../lib/storage';
+import { estimateCost, fmtUSD } from '../lib/fares';
 import { loadPlaces, addPlace, updatePlace, removePlace, makePlace, placeLabel } from '../lib/savedPlaces';
 import { formatClock, distanceMeters, formatDistance } from '../lib/geo';
 import RouteMap from './RouteMap';
@@ -101,12 +102,18 @@ export default function TripScreen({ stations, onStartNav }) {
   const [route, setRoute] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [membership, setMembership] = useState('nonmember'); // 'member' | 'nonmember' (persisted)
   const timer = useRef(null);
 
   useEffect(() => {
     loadRecents().then(setRecents);
     loadPlaces().then(setPlaces);
+    loadMembership().then(setMembership);
     getLocation().then((loc) => setOrigin({ ...CURRENT(), lat: loc.lat, lon: loc.lon })).catch(() => {});
+  }, []);
+
+  const toggleMembership = useCallback(() => {
+    setMembership((prev) => { const next = prev === 'member' ? 'nonmember' : 'member'; saveMembership(next); return next; });
   }, []);
 
   const onType = useCallback((t) => {
@@ -382,6 +389,11 @@ export default function TripScreen({ stations, onStartNav }) {
 
   // ---- RESULTS ----
   const arrivalFor = (p) => formatClock(new Date(Date.now() + p.totalSec * 1000));
+  // Estimated fare for the bike type the plan actually uses (each leg is its own
+  // rental). Multi-stop legs can differ; label as "Mixed" if they're not all one.
+  const legs = current ? (current.segments || [{ bikeType: current.bikeType, rideSec: current.rideSec }]) : [];
+  const norm = (t) => (t === 'ebike' ? 'ebike' : 'classic');
+  const rideCost = legs.reduce((sum, l) => sum + estimateCost(norm(l.bikeType), membership, l.rideSec / 60), 0);
   return (
     <ScrollView style={styles.flex} contentContainerStyle={{ paddingBottom: 28 }} keyboardShouldPersistTaps="handled" scrollEnabled={!dragging}>
       {/* From / stops / To (tap to edit) */}
@@ -448,11 +460,24 @@ export default function TripScreen({ stations, onStartNav }) {
               <Text style={styles.bestSub}>
                 {arrivalFor(current)} arrival · {fmtMiles(current.distanceM || 0)}{current.kind === 'multi' && points ? ` · ${points.length - 2} stop${points.length - 2 > 1 ? 's' : ''}` : ''}
               </Text>
-              {current.kind === 'single' && (
-                <Text style={[styles.bikeTag, { color: current.bikeType === 'ebike' ? c.ebike : c.classic }]}>
-                  {current.bikeType === 'ebike' ? 'e-bike' : 'classic'}
+              <Text style={styles.fareLine}>
+                {current.kind === 'single' && (
+                  <Text style={{ color: current.bikeType === 'ebike' ? c.ebike : c.classic, fontWeight: '600' }}>
+                    {(current.bikeType === 'ebike' ? 'e-bike' : 'classic') + '  ·  '}
+                  </Text>
+                )}
+                {rideCost > 0 && <Text style={styles.fareMuted}>est. </Text>}
+                <Text style={styles.fareAmt}>{fmtUSD(rideCost)}</Text>
+                <Text style={styles.fareMuted}>{'  ·  '}</Text>
+                <Text
+                  style={styles.memLink}
+                  onPress={toggleMembership}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Pricing: ${membership === 'member' ? 'Member' : 'Non-member'}. Tap to switch.`}
+                >
+                  {membership === 'member' ? 'Member' : 'Non-member'}
                 </Text>
-              )}
+              </Text>
             </View>
             <TouchableOpacity style={styles.goBtn} onPress={go} activeOpacity={0.9}>
               <Text style={styles.goTxt}>GO</Text>
@@ -582,10 +607,14 @@ function makeStyles(c) {
     bestMin: { fontSize: 28, fontWeight: '800', color: c.text, fontVariant: ['tabular-nums'] },
     bestSub: { fontSize: 13, color: c.textMute, fontWeight: '500', marginTop: 2, fontVariant: ['tabular-nums'] },
     bestType: { fontSize: 12, color: c.textFaint, fontWeight: '400', marginTop: 1 },
-    bikeTag: { fontSize: 12.5, fontWeight: '600', marginTop: 2 },
     goBtn: { backgroundColor: c.good, width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', ...shadow(c).card },
     goTxt: { color: '#fff', fontSize: 18, fontWeight: '800' },
     divider: { height: 1, backgroundColor: c.hairline, marginVertical: 12 },
+
+    fareLine: { fontSize: 13, marginTop: 3, fontVariant: ['tabular-nums'] },
+    fareMuted: { color: c.textMute, fontWeight: '500' },
+    fareAmt: { color: c.text, fontWeight: '700' },
+    memLink: { color: c.primary, fontWeight: '700', textDecorationLine: 'underline' },
 
     altCard: { flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: radius.md, padding: 14, marginTop: 10, marginHorizontal: 16, backgroundColor: c.surface },
     altMin: { fontSize: 17, fontWeight: '800', color: c.text, fontVariant: ['tabular-nums'] },
