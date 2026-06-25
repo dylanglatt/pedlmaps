@@ -37,6 +37,11 @@ scripts/snapshots.csv
 scripts/*.csv
 out/
 snap/
+
+# Local modeling artifacts (data lives in the pedl-data repo, not here)
+pedl-data/
+combined.parquet
+*.parquet
 assets/pedl logo.png
 assets/icon-dockhop-backup.png
 pedl logo.png

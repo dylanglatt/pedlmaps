@@ -307,7 +307,7 @@ function AppInner() {
               </View>
             }
             onOpenChart={(s) => setChartId(s.id)}
-            onSelect={(s) => { setSelectedId(s.id); setCenter({ lat: s.lat, lon: s.lon }); }}
+            onSelect={(s) => { setSelectedId(s.id); setCenter({ lat: s.lat, lon: s.lon }); setChartId(s.id); }}
           />
         )}
       </BottomSheet>

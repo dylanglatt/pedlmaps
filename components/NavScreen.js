@@ -11,6 +11,7 @@ import { nav } from '../lib/voiceNav';
 import { startSim, stopSim } from '../lib/navSim';
 import { directions, WALK, BIKE } from '../lib/routing';
 import { arrivalLine, continuation, shortInstruction } from '../lib/navPhrasing';
+import { openCitiBike } from '../lib/citibike';
 import { fmtMiles } from '../lib/tripPlanner';
 import { formatClock } from '../lib/geo';
 import { useTheme, radius, shadow } from '../lib/theme';
@@ -50,6 +51,11 @@ function manIcon(step) {
   if (t.includes('left')) return 'turnLeft';
   if (t.includes('right')) return 'turnRight';
   return 'straight';
+}
+// The "grab your bike" moment — when the current/next cue is to undock and ride.
+// That's where we offer the sanctioned handoff to the official Citi Bike app.
+function isUnlockStep(step) {
+  return /undock|start riding/i.test(step?.instruction || '');
 }
 function fmtDist(m) {
   if (m == null || !isFinite(m)) return null;
@@ -278,12 +284,18 @@ export default function NavScreen({ trip, onEnd }) {
                 </View>
                 <Icon name="forward" size={16} color="rgba(255,255,255,0.45)" />
               </View>
-              {next && (
+              {(isUnlockStep(cur) || isUnlockStep(next)) ? (
+                <TouchableOpacity style={styles.unlockCue} onPress={openCitiBike} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel="Open Citi Bike to unlock">
+                  <Icon name="unlock" size={17} color="#fff" />
+                  <Text style={styles.unlockCueTxt} numberOfLines={1}>Undock your bike — tap to open Citi Bike</Text>
+                  <Icon name="forward" size={14} color="rgba(255,255,255,0.6)" />
+                </TouchableOpacity>
+              ) : next ? (
                 <View style={styles.bannerNext}>
                   <Icon name={manIcon(next)} size={15} color="rgba(255,255,255,0.7)" />
                   <Text style={styles.bannerNextTxt} numberOfLines={1}>Then {continuation(next.instruction)}</Text>
                 </View>
-              )}
+              ) : null}
             </TouchableOpacity>
           )}
         </View>
@@ -380,6 +392,8 @@ function makeStyles(c) {
     bannerTxt: { color: '#fff', fontSize: 20, fontWeight: '800' },
     bannerNext: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
     bannerNextTxt: { color: 'rgba(255,255,255,0.75)', fontSize: 14, fontWeight: '500', flex: 1 },
+    unlockCue: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 10, padding: 10, borderRadius: 9, backgroundColor: 'rgba(255,255,255,0.12)' },
+    unlockCueTxt: { color: '#fff', fontSize: 14, fontWeight: '600', flex: 1 },
 
     // Expanded step list (banner tapped open)
     stepsGrip: { alignItems: 'center', paddingBottom: 8 },

@@ -5,6 +5,7 @@ import { useTheme, radius, shadow } from '../lib/theme';
 import {
   splitPattern, docksPattern, patternCaption, isLowConfidence,
 } from '../lib/predictions';
+import { openCitiBike } from '../lib/citibike';
 
 const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const HOUR_TICKS = [6, 9, 12, 15, 18, 21]; // labeled hours
@@ -121,6 +122,13 @@ export default function StationSheet({ station, initialMode = 'bike', onClose })
               <Text style={styles.emptyTxt}>Not enough history yet for this station.</Text>
             </View>
           )}
+
+          {/* Sanctioned handoff: unlock / live battery live in the official app. */}
+          <TouchableOpacity style={styles.unlockRow} onPress={openCitiBike} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Unlock in the Citi Bike app">
+            <Icon name="unlock" size={16} color={c.textMute} />
+            <Text style={styles.unlockTxt}>Unlock in Citi Bike</Text>
+            <Icon name="external" size={12} color={c.textFaint} />
+          </TouchableOpacity>
         </Pressable>
       </Pressable>
     </Modal>
@@ -184,5 +192,8 @@ function makeStyles(c) {
 
     empty: { alignItems: 'center', gap: 10, paddingVertical: 28 },
     emptyTxt: { fontSize: 13.5, color: c.textMute, fontWeight: '500', textAlign: 'center' },
+
+    unlockRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, marginTop: 16, paddingTop: 14, borderTopWidth: 1, borderTopColor: c.hairline },
+    unlockTxt: { fontSize: 14, color: c.textMute, fontWeight: '500' },
   });
 }

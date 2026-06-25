@@ -32,6 +32,8 @@ const MAP = {
   star: { sf: 'star.fill', ion: 'star' },
   swap: { sf: 'arrow.left.arrow.right', ion: 'swap-horizontal' },
   chart: { sf: 'chart.bar.fill', ion: 'stats-chart' },
+  unlock: { sf: 'lock.open.fill', ion: 'lock-open' },
+  external: { sf: 'arrow.up.right', ion: 'open-outline' },
   drag: { sf: 'line.3.horizontal', ion: 'reorder-three' },
   add: { sf: 'plus', ion: 'add' },
   // place-category icons (auto-matched from a saved place's nickname)
