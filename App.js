@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, StatusBar, Alert, Platform, Linking,
+  Animated, Easing,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,9 +19,10 @@ import Icon from './components/Icon';
 import { fetchStations, nearest, countFor } from './lib/gbfs';
 import { getLocation, watchLocation, DEFAULT_CENTER } from './lib/location';
 import { loadPlaces, addPlace, removePlace, setFlipMode, makePlace, migrateLegacy } from './lib/savedPlaces';
+import { loadFavStations, saveFavStations, isFavStation } from './lib/savedStations';
 import { loadUnits, saveUnits, loadOnboarded, saveOnboarded } from './lib/storage';
 import FirstRun from './components/FirstRun';
-import { formatAge } from './lib/geo';
+import { formatAge, distanceMeters } from './lib/geo';
 import { useTheme, radius, shadow } from './lib/theme';
 
 // Name a custom place. Alert.prompt is iOS-only; elsewhere we fall back to the
@@ -33,6 +35,32 @@ function promptNickname(defaultName, cb) {
   } else {
     cb(defaultName);
   }
+}
+
+// Live-status dot with a gentle expanding halo (a "breathing" pulse) when data
+// is fresh. Native-driver scale+opacity, so it's smooth and OTA-safe. When
+// offline/loading we pass pulse=false and it sits as a static dot.
+function PulseDot({ color, pulse }) {
+  const a = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!pulse) return undefined;
+    a.setValue(0);
+    const loop = Animated.loop(
+      Animated.timing(a, { toValue: 1, duration: 1900, easing: Easing.out(Easing.ease), useNativeDriver: true })
+    );
+    loop.start();
+    return () => loop.stop();
+  }, [pulse, a]);
+  const scale = a.interpolate({ inputRange: [0, 1], outputRange: [1, 2.8] });
+  const opacity = a.interpolate({ inputRange: [0, 1], outputRange: [0.5, 0] });
+  return (
+    <View style={{ width: 7, height: 7, alignItems: 'center', justifyContent: 'center' }}>
+      {pulse && (
+        <Animated.View style={{ position: 'absolute', width: 7, height: 7, borderRadius: 4, backgroundColor: color, transform: [{ scale }], opacity }} />
+      )}
+      <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: color }} />
+    </View>
+  );
 }
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
@@ -63,6 +91,8 @@ function AppInner() {
   const [units, setUnits] = useState('imperial');
   const [selectedId, setSelectedId] = useState(null);
   const [chartId, setChartId] = useState(null);
+  const [favIds, setFavIds] = useState([]);          // favorite station ids
+  const [showAllNearby, setShowAllNearby] = useState(false);
   const [places, setPlaces] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -98,8 +128,8 @@ function AppInner() {
 
   useEffect(() => {
     (async () => {
-      const [pl, un, onboarded] = await Promise.all([loadPlaces(), loadUnits(), loadOnboarded()]);
-      setPlaces(pl); setUnits(un); await refresh();
+      const [pl, un, onboarded, fv] = await Promise.all([loadPlaces(), loadUnits(), loadOnboarded(), loadFavStations()]);
+      setPlaces(pl); setUnits(un); setFavIds(fv); await refresh();
       SplashScreen.hideAsync().catch(() => {});
       if (onboarded && !FORCE_PRIMER) initLocation();
       else setShowPrimer(true); // defer the OS location prompt until they tap "Get started"
@@ -138,14 +168,36 @@ function AppInner() {
   }, [all]);
 
   const stations = useMemo(() => nearest(all, center.lat, center.lon, 75), [all, center]);
-  // The 10 nearest, optionally re-sorted by availability (most bikes/docks first).
-  // The set is always the nearest 10; sort only reorders within it.
-  const listStations = useMemo(() => {
-    const pool = stations.slice(0, 10);
-    if (sort === 'avail') return [...pool].sort((a, b) => countFor(b, mode, bikeType) - countFor(a, mode, bikeType));
-    return pool;
-  }, [stations, sort, mode, bikeType]);
+  const favIdSet = useMemo(() => new Set(favIds), [favIds]);
+  // Favorite stations resolved to live data, with distance from the current center.
+  const favStations = useMemo(() => {
+    if (!favIds.length || !all.length) return [];
+    return favIds
+      .map((id) => {
+        const s = all.find((x) => x.id === id);
+        return s ? { ...s, distance: distanceMeters(center.lat, center.lon, s.lat, s.lon) } : null;
+      })
+      .filter(Boolean);
+  }, [favIds, all, center]);
+  // Nearby pool excludes favorites (no dupes); sort reorders within it. Collapsed
+  // shows the nearest few; "Show all" expands to the full nearby set.
+  const NEARBY_CAP = 6;
+  const nearbyPool = useMemo(() => {
+    const pool = stations.filter((s) => !favIdSet.has(s.id));
+    return sort === 'avail' ? [...pool].sort((a, b) => countFor(b, mode, bikeType) - countFor(a, mode, bikeType)) : pool;
+  }, [stations, favIdSet, sort, mode, bikeType]);
+  const listStations = useMemo(() => (showAllNearby ? nearbyPool : nearbyPool.slice(0, NEARBY_CAP)), [nearbyPool, showAllNearby]);
+  const canExpand = nearbyPool.length > NEARBY_CAP;
   const chartStation = useMemo(() => all.find((s) => s.id === chartId) || null, [all, chartId]);
+
+  const toggleFav = useCallback((station) => {
+    if (!station) return;
+    setFavIds((cur) => {
+      const next = cur.includes(station.id) ? cur.filter((id) => id !== station.id) : [...cur, station.id];
+      saveFavStations(next);
+      return next;
+    });
+  }, []);
 
   const reloadPlaces = useCallback(async () => { setPlaces(await loadPlaces()); }, []);
 
@@ -158,8 +210,10 @@ function AppInner() {
 
   const styles = useMemo(() => makeStyles(c), [c]);
 
+  const ageSec = updatedAt ? Math.floor((Date.now() - updatedAt) / 1000) : 0;
   const statusColor = error ? c.danger : loading ? c.textFaint : c.good;
-  const statusText = error ? 'Offline' : loading ? 'Loading…' : `${stations.length} stations nearby · updated ${formatAge(Math.floor((updatedAt || Date.now()) / 1000))}`;
+  const statusText = error ? 'Offline' : loading ? 'Loading…'
+    : ageSec < 90 ? 'Updated just now' : `Updated ${formatAge(Math.floor(updatedAt / 1000))}`;
 
   const Header = () =>
     searching ? (
@@ -218,7 +272,7 @@ function AppInner() {
           </View>
         </View>
         <View style={styles.statusLine}>
-          <View style={[styles.dot, { backgroundColor: statusColor }]} />
+          <PulseDot color={statusColor} pulse={!error && !loading} />
           <Text style={styles.statusTxt} numberOfLines={1}>{statusText}</Text>
         </View>
         <TouchableOpacity style={styles.search} onPress={openSearch} activeOpacity={0.8}>
@@ -282,11 +336,16 @@ function AppInner() {
         ) : (
           <StationList
             stations={listStations}
+            favorites={favStations}
             mode={mode}
             bikeType={bikeType}
             units={units}
+            expanded={showAllNearby}
+            onToggleExpanded={canExpand ? () => setShowAllNearby((v) => !v) : null}
+            canExpand={canExpand}
             header={
               <View style={styles.sortRow}>
+                <Text style={styles.nearbyLbl}>NEARBY</Text>
                 <View style={styles.sortToggle}>
                   {[
                     { k: 'near', label: 'Nearest' },
@@ -312,7 +371,7 @@ function AppInner() {
         )}
       </BottomSheet>
 
-      {chartStation && <StationSheet station={chartStation} initialMode={mode} onClose={() => setChartId(null)} />}
+      {chartStation && <StationSheet station={chartStation} initialMode={mode} isFav={isFavStation(favIds, chartStation.id)} onToggleFav={toggleFav} onClose={() => setChartId(null)} />}
 
       {navTrip && <NavScreen trip={navTrip} onEnd={() => setNavTrip(null)} />}
 
@@ -358,7 +417,8 @@ function makeStyles(c) {
     filterToggle: { flexDirection: 'row', backgroundColor: c.surfaceAlt, borderRadius: radius.pill, padding: 2 },
     filterItem: { minWidth: 30, paddingVertical: 3, paddingHorizontal: 9, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
     // Sort control above the station list.
-    sortRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 2, paddingBottom: 8 },
+    sortRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 2, paddingBottom: 8 },
+    nearbyLbl: { fontSize: 11, fontWeight: '700', letterSpacing: 0.4, color: c.textFaint },
     sortToggle: { flexDirection: 'row', backgroundColor: c.surfaceAlt, borderRadius: radius.pill, padding: 2 },
     sortItem: { paddingVertical: 5, paddingHorizontal: 12, borderRadius: radius.pill },
     sortTxt: { fontSize: 12.5, color: c.textMute, fontWeight: '600' },

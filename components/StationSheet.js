@@ -12,8 +12,10 @@ const HOUR_TICKS = [6, 9, 12, 15, 18, 21]; // labeled hours
 const tickLabel = (h) => (h === 0 ? '12a' : h === 12 ? '12p' : h < 12 ? `${h}a` : `${h - 12}p`);
 const hourLabel = (h) => (h === 0 ? '12 AM' : h === 12 ? '12 PM' : h < 12 ? `${h} AM` : `${h - 12} PM`);
 
+const STAR = '#E5A100'; // gold for a favorited station (distinct from the brand)
+
 // Typical-availability popup for one station (Google "popular times" style).
-export default function StationSheet({ station, initialMode = 'bike', onClose }) {
+export default function StationSheet({ station, initialMode = 'bike', isFav = false, onToggleFav, onClose }) {
   const c = useTheme();
   const styles = useMemo(() => makeStyles(c), [c]);
 
@@ -46,9 +48,16 @@ export default function StationSheet({ station, initialMode = 'bike', onClose })
                 <Text style={styles.nowTxt}>Now: {station.bikes} bikes · {station.docks} open docks</Text>
               </View>
             </View>
-            <TouchableOpacity onPress={onClose} hitSlop={10} style={styles.closeBtn}>
-              <Icon name="close" size={18} color={c.textMute} />
-            </TouchableOpacity>
+            <View style={styles.headBtns}>
+              {onToggleFav && (
+                <TouchableOpacity onPress={() => onToggleFav(station)} hitSlop={8} style={styles.closeBtn} accessibilityRole="button" accessibilityLabel={isFav ? 'Remove from favorites' : 'Add to favorites'}>
+                  <Icon name="star" size={16} color={isFav ? STAR : c.textMute} />
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={onClose} hitSlop={10} style={styles.closeBtn}>
+                <Icon name="close" size={18} color={c.textMute} />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {/* Controls: bikes/docks + day */}
@@ -161,6 +170,7 @@ function makeStyles(c) {
     nowRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 4 },
     dot: { width: 7, height: 7, borderRadius: 4 },
     nowTxt: { fontSize: 12.5, color: c.textMute, fontWeight: '500' },
+    headBtns: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     closeBtn: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center', backgroundColor: c.surface },
 
     controls: { flexDirection: 'row', marginBottom: 10 },
