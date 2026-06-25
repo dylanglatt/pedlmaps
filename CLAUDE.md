@@ -30,10 +30,14 @@ the cases, plus `node --check <file>` (or `py_compile` for scripts/). See `/plan
 - **OTA-safe changes** (JS/TS only — no new native modules, permissions, icon, or name):
   just push to `main`. CI (`.github/workflows/eas-update.yml`) publishes an EAS Update to the
   **`preview`** channel automatically. The TestFlight/dev build picks it up on next launch.
-- **Native changes** (new native dep, app icon/name, permissions, prebuild) need a real build:
-  `eas build --profile preview --platform ios`. The committed `ios/` project is still internally
-  named "DockHop" — a real production build needs `npx expo prebuild --clean` to regenerate it
-  as pedl and pick up the new icon.
+- **Native changes** (new native dep, app icon/name, permissions, new Apple target) need a real
+  build: `eas build --profile preview --platform ios`. This is a **managed / CNG** project — `ios/`
+  is gitignored and regenerated from `app.json` + config plugins on every build (EAS prebuilds in
+  CI), so all native config lives declaratively in `app.json` (`ios.infoPlist`, `expo-location`
+  plugin, android permissions). The pedl name + icon already ship via EAS (TestFlight), so there is
+  NO pending "rebrand prebuild" and no committed Xcode project to worry about — adding native
+  features (e.g. a WidgetKit target) means adding a config plugin + entitlement, not hand-editing
+  `ios/`.
 - `eas.json`: the **production** profile deliberately uses `channel: preview` + `environment:
   preview` so the store build keeps receiving the same OTA pushes and EAS-hosted env vars.
 

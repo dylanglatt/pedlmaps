@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, StatusBar, Alert, Platform, Linking,
-  Animated, Easing,
+  Animated, Easing, Keyboard,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -214,7 +214,7 @@ function AppInner() {
   const changeUnits = useCallback((u) => { setUnits(u); saveUnits(u); }, []);
 
   const openSearch = useCallback(() => { setSearching(true); setSheetIndex(2); }, []);
-  const closeSearch = useCallback(() => { setSearching(false); setSheetIndex(1); }, []);
+  const closeSearch = useCallback(() => { Keyboard.dismiss(); setSearching(false); setSheetIndex(1); }, []);
 
   const [feedback, setFeedback] = useState(null); // screen name when the feedback sheet is open
 
