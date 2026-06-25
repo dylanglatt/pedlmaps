@@ -8,6 +8,8 @@ import Svg, { Path, Circle } from 'react-native-svg';
 import Icon from './Icon';
 import RouteMap from './RouteMap';
 import { nav } from '../lib/voiceNav';
+import { startSim, stopSim } from '../lib/navSim';
+import { directions, WALK, BIKE } from '../lib/routing';
 import { arrivalLine, continuation, shortInstruction } from '../lib/navPhrasing';
 import { fmtMiles } from '../lib/tripPlanner';
 import { formatClock } from '../lib/geo';
@@ -67,7 +69,7 @@ const ROW = {
   ride: { icon: 'bike', color: 'good' },
   dock: { icon: 'dock', color: 'dock' },
   stop: { icon: 'pin', color: 'primary' },
-  dest: { icon: 'flag', color: 'danger' },
+  dest: { icon: 'pin', color: 'danger' },
 };
 
 // Condense the flat maneuver list into a high-level itinerary: one row per leg —
@@ -120,12 +122,37 @@ function buildSteps(maneuvers, dest, stations = {}) {
   return out;
 }
 
+// Rebuild the route for everything still ahead, starting from the rider's current
+// position. We chain through the remaining leg boundaries (pickup/dock/stop/dest)
+// the planner already chose, so the SAME stations are kept — only the path to them
+// is recomputed. Profile per leg: heading to a dock = biking, everything else =
+// walking. The waypoint boundary cues are re-emitted verbatim so arrival detection
+// and the "undock/dock/arrived" lines stay intact.
+async function rebuildFrom(here, waypoints) {
+  const maneuvers = [];
+  const coords = [];
+  let anchor = [here.lon, here.lat]; // [lon, lat] for the routing API
+  for (const wp of waypoints) {
+    const profile = wp.kind === 'dock' ? BIKE : WALK;
+    const target = [wp.location[1], wp.location[0]]; // location is [lat, lon]
+    let leg = null;
+    try { leg = await directions(profile, [anchor, target]); } catch {}
+    if (leg) { maneuvers.push(...leg.maneuvers); coords.push(...leg.coords); }
+    maneuvers.push({ instruction: wp.instruction, location: wp.location, distance: 0, kind: wp.kind });
+    anchor = target;
+  }
+  return { maneuvers, coords };
+}
+
 export default function NavScreen({ trip, onEnd }) {
   const c = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(c), [c]);
   const { plan, route, dest } = trip;
 
+  // The live route geometry can change mid-trip on a reroute, so hold it in state.
+  const [coords, setCoords] = useState(route.coords);
+  const [maneuvers, setManeuvers] = useState(route.maneuvers);
   const [cur, setCur] = useState(route.maneuvers?.[0] || null);
   const [next, setNext] = useState(route.maneuvers?.[1] || null);
   const [dist, setDist] = useState(null);
@@ -146,6 +173,17 @@ export default function NavScreen({ trip, onEnd }) {
       intro: `Starting route to ${dest?.name || dest?.label || 'your destination'}.`,
       onProgress: ({ maneuver, next: nx, distance, index }) => { setCur(maneuver); setNext(nx); setDist(distance); if (typeof index === 'number') setCurIndex(index); },
       onLocationUpdate: (h) => setHere(h),
+      onReroute: async (h) => {
+        try {
+          const wps = nav.remainingWaypoints();
+          if (!wps.length) { nav.cancelReroute(); return; }
+          const r = await rebuildFrom(h, wps);
+          if (!r.maneuvers.length || !r.coords.length) { nav.cancelReroute(); return; }
+          setCoords(r.coords);
+          setManeuvers(r.maneuvers);
+          nav.replaceRoute(r.maneuvers, r.coords); // resumes guidance on the new path
+        } catch { nav.cancelReroute(); }
+      },
       onArrive: () => {
         setCur({ instruction: arrivalLine(dest && !dest.current ? (dest.name || dest.label) : null) }); setNext(null); setDist(null);
         // Let the spoken "You have arrived" land, then close the route itself.
@@ -155,7 +193,7 @@ export default function NavScreen({ trip, onEnd }) {
     tick.current = setInterval(() => {
       setMinLeft(Math.max(0, Math.round((arrival.getTime() - Date.now()) / 60000)));
     }, 15000);
-    return () => { clearInterval(tick.current); nav.stop(); };
+    return () => { clearInterval(tick.current); stopSim(); nav.stop(); };
   }, []);
 
   const toggle = (to) => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setExpanded(to); };
@@ -175,7 +213,7 @@ export default function NavScreen({ trip, onEnd }) {
   const setVoice = (v) => { setVoiceOn(v); nav.setMuted(!v); };
 
   // Navigation shows full detail: green bike pickups + red "P" docks (the
-  // operational "how"), plus the numbered place stops and the destination flag.
+  // operational "how"), plus the numbered place stops and the destination pin.
   const markers = [];
   if (plan.segments) {
     plan.segments.forEach((seg) => {
@@ -199,12 +237,12 @@ export default function NavScreen({ trip, onEnd }) {
       docks: segs.map((s) => s.destStation && s.destStation.name),
     };
   }, [plan]);
-  const steps = useMemo(() => buildSteps(route.maneuvers, dest, stationNames), [route, dest, stationNames]);
+  const steps = useMemo(() => buildSteps(maneuvers, dest, stationNames), [maneuvers, dest, stationNames]);
 
   return (
     <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={() => { nav.stop(); onEnd && onEnd(); }}>
       <View style={styles.root}>
-        <RouteMap coords={route.coords} markers={markers} fill follow={overview ? null : here} overview={overview} showUser ink={c.nav} paper="#fff" />
+        <RouteMap coords={coords} markers={markers} fill follow={overview ? null : here} overview={overview} showUser ink={c.nav} paper="#fff" />
 
         {/* Top maneuver banner — tap to expand into the full step list */}
         <View style={[styles.banner, { top: insets.top + 8 }]}>
@@ -281,7 +319,7 @@ export default function NavScreen({ trip, onEnd }) {
                 return (
                   <View key={i} style={styles.optRow}>
                     {isFinal
-                      ? <Icon name="flag" size={18} color={c.danger} />
+                      ? <Icon name="pin" size={18} color={c.danger} />
                       : <View style={styles.numSq}><Text style={styles.numTxt}>{i + 1}</Text></View>}
                     <View style={styles.flex}>
                       <Text style={styles.optName} numberOfLines={1}>{pt?.name || (isFinal ? 'Destination' : 'Stop')}</Text>
@@ -296,7 +334,20 @@ export default function NavScreen({ trip, onEnd }) {
                 <Text style={styles.optTxt}>Voice guidance</Text>
                 <Switch value={voiceOn} onValueChange={setVoice} trackColor={{ true: c.primary }} />
               </View>
-              <TouchableOpacity style={styles.end} onPress={() => { nav.stop(); onEnd && onEnd(); }} activeOpacity={0.9}>
+              {__DEV__ && (
+                <View style={styles.simRow}>
+                  <TouchableOpacity style={styles.simBtn} onPress={() => startSim(coords, { scenario: 'clean' })} activeOpacity={0.85}>
+                    <Text style={styles.simTxt}>▶ Sim ride</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.simBtn} onPress={() => startSim(coords, { scenario: 'detour' })} activeOpacity={0.85}>
+                    <Text style={styles.simTxt}>↪ Sim detour</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.simBtn} onPress={() => stopSim()} activeOpacity={0.85}>
+                    <Text style={styles.simTxt}>■ Stop</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+              <TouchableOpacity style={styles.end} onPress={() => { stopSim(); nav.stop(); onEnd && onEnd(); }} activeOpacity={0.9}>
                 <Text style={styles.endTxt}>End Route</Text>
               </TouchableOpacity>
             </View>
@@ -362,6 +413,9 @@ function makeStyles(c) {
     optName: { fontSize: 15, color: c.text, fontWeight: '600' },
     optSub: { fontSize: 12.5, color: c.textMute, fontWeight: '400', marginTop: 2 },
     optTag: { fontSize: 11, color: c.textMute, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
+    simRow: { flexDirection: 'row', gap: 8, marginBottom: 8 },
+    simBtn: { flex: 1, backgroundColor: c.surface, borderRadius: radius.md, paddingVertical: 11, alignItems: 'center', borderWidth: StyleSheet.hairlineWidth, borderColor: c.border },
+    simTxt: { color: c.text, fontSize: 13, fontWeight: '700' },
     end: { backgroundColor: c.danger, borderRadius: radius.md, paddingVertical: 15, alignItems: 'center', marginTop: 4 },
     endTxt: { color: '#fff', fontSize: 17, fontWeight: '800' },
   });

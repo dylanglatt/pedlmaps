@@ -109,10 +109,9 @@ export default function StationMap({ stations, center, userLoc = null, mode, bik
                   <Text style={styles.txt}>{s.classic}</Text>
                 </View>
               ) : (
-                <View style={styles.row}>
-                  <Ionicons name={bikeType === 'electric' ? 'flash' : 'bicycle'} size={11} color="#fff" />
-                  <Text style={styles.txt}>{countFor(s, mode, bikeType)}</Text>
-                </View>
+                // A single bike-type filter is active — the toggle already says
+                // which type, so just show the number (no redundant icon).
+                <Text style={styles.txt}>{countFor(s, mode, bikeType)}</Text>
               )}
             </View>
             <Callout tooltip>

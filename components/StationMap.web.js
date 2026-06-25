@@ -24,8 +24,10 @@ const TILES = {
 
 function innerHtml(s, mode, bikeType) {
   if (mode === 'dock') return `${s.docks}`;
+  // "Any" shows both with icons to tell them apart; a single-type filter already
+  // says which type, so just show the number.
   if (bikeType === 'both') return `⚡${s.ebikes} <span style="opacity:.5">·</span> ${s.classic}`;
-  if (bikeType === 'electric') return `⚡${s.ebikes}`;
+  if (bikeType === 'electric') return `${s.ebikes}`;
   return `${s.classic}`;
 }
 

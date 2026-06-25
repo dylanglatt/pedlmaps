@@ -15,7 +15,7 @@ import BottomSheet from './components/BottomSheet';
 import NavScreen from './components/NavScreen';
 import Feedback from './components/Feedback';
 import Icon from './components/Icon';
-import { fetchStations, nearest } from './lib/gbfs';
+import { fetchStations, nearest, countFor } from './lib/gbfs';
 import { getLocation, watchLocation, DEFAULT_CENTER } from './lib/location';
 import { loadPlaces, addPlace, removePlace, setFlipMode, makePlace, migrateLegacy } from './lib/savedPlaces';
 import { loadUnits, saveUnits, loadOnboarded, saveOnboarded } from './lib/storage';
@@ -58,7 +58,8 @@ function AppInner() {
   const [all, setAll] = useState([]);
   const [center, setCenter] = useState(DEFAULT_CENTER);
   const [mode, setMode] = useState('bike');
-  const [bikeType, setBikeType] = useState('both');
+  const [bikeType, setBikeType] = useState('electric'); // default: electric only (less map clutter)
+  const [sort, setSort] = useState('near'); // 'near' (proximity) | 'avail' (most bikes/docks)
   const [units, setUnits] = useState('imperial');
   const [selectedId, setSelectedId] = useState(null);
   const [chartId, setChartId] = useState(null);
@@ -137,7 +138,13 @@ function AppInner() {
   }, [all]);
 
   const stations = useMemo(() => nearest(all, center.lat, center.lon, 75), [all, center]);
-  const listStations = useMemo(() => stations.slice(0, 8), [stations]); // just the closest few; map covers the rest, status keeps full nearby count
+  // The 10 nearest, optionally re-sorted by availability (most bikes/docks first).
+  // The set is always the nearest 10; sort only reorders within it.
+  const listStations = useMemo(() => {
+    const pool = stations.slice(0, 10);
+    if (sort === 'avail') return [...pool].sort((a, b) => countFor(b, mode, bikeType) - countFor(a, mode, bikeType));
+    return pool;
+  }, [stations, sort, mode, bikeType]);
   const chartStation = useMemo(() => all.find((s) => s.id === chartId) || null, [all, chartId]);
 
   const reloadPlaces = useCallback(async () => { setPlaces(await loadPlaces()); }, []);
@@ -175,12 +182,39 @@ function AppInner() {
             <Icon name="chat" size={11} color={c.onPrimary} />
             <Text style={styles.betaTxt}>BETA</Text>
           </TouchableOpacity>
-          <View style={styles.unitToggle}>
-            {[{ k: 'imperial', label: 'mi' }, { k: 'metric', label: 'km' }].map((u) => (
-              <TouchableOpacity key={u.k} style={[styles.unitItem, units === u.k && styles.unitItemOn]} onPress={() => changeUnits(u.k)} activeOpacity={0.8}>
-                <Text style={[styles.unitTxt, units === u.k && styles.unitTxtOn]}>{u.label}</Text>
-              </TouchableOpacity>
-            ))}
+          <View style={styles.headRight}>
+            {mode === 'bike' && (
+              <View style={styles.filterToggle}>
+                {[
+                  { k: 'electric', icon: 'flash', label: 'Electric bikes' },
+                  { k: 'classic', icon: 'bicycle', label: 'Classic bikes' },
+                  { k: 'both', text: 'Any', label: 'Any bike' },
+                ].map((o) => (
+                  <TouchableOpacity
+                    key={o.k}
+                    style={[styles.filterItem, bikeType === o.k && styles.unitItemOn]}
+                    onPress={() => setBikeType(o.k)}
+                    activeOpacity={0.8}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Show ${o.label}`}
+                    accessibilityState={{ selected: bikeType === o.k }}
+                  >
+                    {o.icon ? (
+                      <Ionicons name={o.icon} size={13} color={bikeType === o.k ? c.text : c.textMute} />
+                    ) : (
+                      <Text style={[styles.unitTxt, bikeType === o.k && styles.unitTxtOn]}>{o.text}</Text>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+            <View style={styles.unitToggle}>
+              {[{ k: 'imperial', label: 'mi' }, { k: 'metric', label: 'km' }].map((u) => (
+                <TouchableOpacity key={u.k} style={[styles.unitItem, units === u.k && styles.unitItemOn]} onPress={() => changeUnits(u.k)} activeOpacity={0.8}>
+                  <Text style={[styles.unitTxt, units === u.k && styles.unitTxtOn]}>{u.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
         </View>
         <View style={styles.statusLine}>
@@ -192,25 +226,12 @@ function AppInner() {
           <Text style={styles.searchTxt}>Where to?</Text>
         </TouchableOpacity>
         <View style={styles.seg}>
-          {[{ k: 'bike', label: 'Bikes' }, { k: 'dock', label: 'Docks' }].map((o) => (
+          {[{ k: 'bike', label: 'Bikes' }, { k: 'dock', label: 'Stations' }].map((o) => (
             <TouchableOpacity key={o.k} style={[styles.segItem, mode === o.k && styles.segItemOn]} onPress={() => setMode(o.k)} activeOpacity={0.85}>
               <Text style={[styles.segTxt, mode === o.k && styles.segTxtOn]}>{o.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
-        {mode === 'bike' && (
-          <View style={styles.seg}>
-            {[
-              { k: 'both', label: 'Both' },
-              { k: 'electric', label: 'Electric' },
-              { k: 'classic', label: 'Manual' },
-            ].map((o) => (
-              <TouchableOpacity key={o.k} style={[styles.segItem, bikeType === o.k && styles.segItemOn]} onPress={() => setBikeType(o.k)} activeOpacity={0.85}>
-                <Text style={[styles.segTxt, bikeType === o.k && styles.segTxtOn]}>{o.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
       </View>
     );
 
@@ -264,6 +285,27 @@ function AppInner() {
             mode={mode}
             bikeType={bikeType}
             units={units}
+            header={
+              <View style={styles.sortRow}>
+                <View style={styles.sortToggle}>
+                  {[
+                    { k: 'near', label: 'Nearest' },
+                    { k: 'avail', label: mode === 'dock' ? 'Most docks' : 'Most bikes' },
+                  ].map((o) => (
+                    <TouchableOpacity
+                      key={o.k}
+                      style={[styles.sortItem, sort === o.k && styles.unitItemOn]}
+                      onPress={() => setSort(o.k)}
+                      activeOpacity={0.8}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: sort === o.k }}
+                    >
+                      <Text style={[styles.sortTxt, sort === o.k && styles.unitTxtOn]}>{o.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            }
             onOpenChart={(s) => setChartId(s.id)}
             onSelect={(s) => { setSelectedId(s.id); setCenter({ lat: s.lat, lon: s.lon }); }}
           />
@@ -311,6 +353,15 @@ function makeStyles(c) {
     unitItemOn: { backgroundColor: c.elevated, ...shadow(c).card },
     unitTxt: { fontSize: 12, color: c.textMute, fontWeight: '600' },
     unitTxtOn: { color: c.text },
+    // Bike-type filter (electric / classic / any) — compact pill beside the units.
+    headRight: { flexDirection: 'row', alignItems: 'center' },
+    filterToggle: { flexDirection: 'row', backgroundColor: c.surfaceAlt, borderRadius: radius.pill, padding: 2 },
+    filterItem: { minWidth: 30, paddingVertical: 3, paddingHorizontal: 9, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center' },
+    // Sort control above the station list.
+    sortRow: { flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 16, paddingTop: 2, paddingBottom: 8 },
+    sortToggle: { flexDirection: 'row', backgroundColor: c.surfaceAlt, borderRadius: radius.pill, padding: 2 },
+    sortItem: { paddingVertical: 5, paddingHorizontal: 12, borderRadius: radius.pill },
+    sortTxt: { fontSize: 12.5, color: c.textMute, fontWeight: '600' },
 
     browseHead: { paddingBottom: 10, gap: 10 },
     search: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surface, borderRadius: radius.pill, paddingVertical: 13, paddingHorizontal: 16 },
