@@ -12,7 +12,7 @@ const tap = () => { if (Haptics && Platform.OS !== 'web') Haptics.selectionAsync
 const BADGE_LABEL = { dock: 'docks', electric: 'e-bikes', classic: 'manual', both: 'bikes' };
 
 // One station row — shared by the nearby list and the pinned favorites.
-function StationRow({ s, mode, bikeType, c, styles, onSelect, onOpenChart }) {
+function StationRow({ s, mode, bikeType, c, styles, onSelect, onOpenChart, onLongPress }) {
   const level = availabilityLevel(s, mode, bikeType);
   const lc = levelColor(c, level);
   const count = countFor(s, mode, bikeType);
@@ -27,7 +27,7 @@ function StationRow({ s, mode, bikeType, c, styles, onSelect, onOpenChart }) {
       ]
     : [];
   return (
-    <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => onSelect && onSelect(s)}>
+    <TouchableOpacity style={styles.row} activeOpacity={0.7} onPress={() => onSelect && onSelect(s)} onLongPress={onLongPress} delayLongPress={350}>
       <View style={[styles.badge, { backgroundColor: lc.bg }]}>
         <Text style={[styles.badgeNum, { color: lc.fg }]}>{count}</Text>
         <Text style={[styles.badgeLabel, { color: lc.fg }]}>{badgeLabel}</Text>
@@ -61,7 +61,7 @@ function StationRow({ s, mode, bikeType, c, styles, onSelect, onOpenChart }) {
 
 export default function StationList({
   stations, favorites = [], mode, bikeType = 'both', units = 'imperial',
-  onSelect, onOpenChart, scroll = true, header = null,
+  onSelect, onOpenChart, onRemoveFavorite = null, scroll = true, header = null,
   expanded = false, onToggleExpanded = null, canExpand = false,
 }) {
   const c = useTheme();
@@ -81,7 +81,7 @@ export default function StationList({
           {favorites.map((s, i) => (
             <View key={s.id}>
               {i > 0 && <View style={styles.sep} />}
-              <StationRow s={s} mode={mode} bikeType={bikeType} c={c} styles={styles} onSelect={onSelect} onOpenChart={onOpenChart} />
+              <StationRow s={s} mode={mode} bikeType={bikeType} c={c} styles={styles} onSelect={onSelect} onOpenChart={onOpenChart} onLongPress={onRemoveFavorite ? () => onRemoveFavorite(s) : undefined} />
             </View>
           ))}
         </View>

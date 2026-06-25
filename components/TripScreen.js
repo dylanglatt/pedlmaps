@@ -201,6 +201,14 @@ export default function TripScreen({ stations, onStartNav }) {
   const refreshPlaces = useCallback(async () => setPlaces(await loadPlaces()), []);
   const onRenamePlace = useCallback(async (p, name) => { await updatePlace(p.id, { nickname: name }); refreshPlaces(); }, [refreshPlaces]);
   const onDeletePlace = useCallback(async (p) => { await removePlace(p.id); refreshPlaces(); }, [refreshPlaces]);
+  // Long-press a place tile to remove it (confirmed) — mirrors favorite stations.
+  const confirmRemovePlace = useCallback((p) => {
+    if (!p) return;
+    Alert.alert('Remove from Favorites?', p.nickname || p.name || '', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => onDeletePlace(p) },
+    ]);
+  }, [onDeletePlace]);
 
   // Save a search suggestion straight to favorites (star on the result row).
   const saveSuggestion = async (s) => {
@@ -342,7 +350,7 @@ export default function TripScreen({ stations, onStartNav }) {
         <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: 24 }}>
           {showRecents ? (
             <>
-              {!saving && places.length > 0 && (
+              {!saving && (
                 <SavedPlacesRow
                   places={places}
                   from={origin && origin.lat != null ? origin : null}
@@ -350,6 +358,7 @@ export default function TripScreen({ stations, onStartNav }) {
                   onAdd={onAddPlace}
                   onAddType={startSave}
                   onManage={() => setShowManager(true)}
+                  onRemove={confirmRemovePlace}
                 />
               )}
               {editing === 'from' && (

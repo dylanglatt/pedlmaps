@@ -8,7 +8,7 @@ import { useTheme, radius } from '../lib/theme';
 
 // Apple-Maps-style row: Home + Work pinned slots (with Add when empty), then
 // custom favorites, then an Add tile. The "Places ›" header opens the manager.
-export default function SavedPlacesRow({ places = [], from, units = 'imperial', onPick, onAdd, onAddType, onManage }) {
+export default function SavedPlacesRow({ places = [], from, units = 'imperial', onPick, onAdd, onAddType, onManage, onRemove }) {
   const c = useTheme();
   const styles = useMemo(() => makeStyles(c), [c]);
 
@@ -27,7 +27,7 @@ export default function SavedPlacesRow({ places = [], from, units = 'imperial', 
   };
 
   const FilledTile = ({ p }) => (
-    <TouchableOpacity style={styles.tile} activeOpacity={0.8} onPress={() => onPick && onPick(p)}>
+    <TouchableOpacity style={styles.tile} activeOpacity={0.8} onPress={() => onPick && onPick(p)} onLongPress={() => onRemove && onRemove(p)} delayLongPress={350}>
       <View style={[styles.circle, { backgroundColor: TILE_BG[tileColorKey(p)] }]}>
         <Icon name={iconForPlace(p)} size={26} color={c.onPrimary} />
       </View>
@@ -61,8 +61,6 @@ export default function SavedPlacesRow({ places = [], from, units = 'imperial', 
             <View style={[styles.circle, styles.emptyCircle]}>
               <Icon name="add" size={26} color={c.textMute} />
             </View>
-            <Text style={styles.name} numberOfLines={2}>Add</Text>
-            <Text style={styles.sub} numberOfLines={1}> </Text>
           </TouchableOpacity>
         )}
       </ScrollView>

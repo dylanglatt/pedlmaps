@@ -199,6 +199,16 @@ function AppInner() {
     });
   }, []);
 
+  // Long-press a pinned favorite to remove it (confirmed). Same gesture/dialog as
+  // long-pressing a saved place tile in the planner.
+  const confirmRemoveFav = useCallback((station) => {
+    if (!station) return;
+    Alert.alert('Remove from Favorites?', station.name, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: () => toggleFav(station) },
+    ]);
+  }, [toggleFav]);
+
   const reloadPlaces = useCallback(async () => { setPlaces(await loadPlaces()); }, []);
 
   const changeUnits = useCallback((u) => { setUnits(u); saveUnits(u); }, []);
@@ -366,6 +376,7 @@ function AppInner() {
               </View>
             }
             onOpenChart={(s) => setChartId(s.id)}
+            onRemoveFavorite={confirmRemoveFav}
             onSelect={(s) => { setSelectedId(s.id); setCenter({ lat: s.lat, lon: s.lon }); setChartId(s.id); }}
           />
         )}
