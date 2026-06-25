@@ -1,0 +1,7 @@
+{
+  "name": "widget-bridge",
+  "version": "1.0.0",
+  "description": "Writes Pedl favorites to the iOS App Group and reloads the home-screen widget.",
+  "main": "index.js",
+  "private": true
+}

@@ -48,3 +48,9 @@ pedl logo.png
 
 # Claude Code (personal overrides only; shared config is committed)
 .claude/settings.local.json
+
+# apple-targets generated artifacts (regenerated from expo-target.config.js on
+# every prebuild). The source — expo-target.config.js, *.swift, Assets.xcassets —
+# IS committed; these two are derived, so ignore them to avoid prebuild churn.
+targets/**/generated.entitlements
+targets/**/Info.plist

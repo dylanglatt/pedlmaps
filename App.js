@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, StatusBar, Alert, Platform, Linking,
-  Animated, Easing, Keyboard,
+  Animated, Easing, Keyboard, AppState,
 } from 'react-native';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -20,6 +20,7 @@ import { fetchStations, nearest, countFor } from './lib/gbfs';
 import { getLocation, watchLocation, DEFAULT_CENTER } from './lib/location';
 import { loadPlaces, addPlace, removePlace, setFlipMode, makePlace, migrateLegacy } from './lib/savedPlaces';
 import { loadFavStations, saveFavStations, isFavStation } from './lib/savedStations';
+import { syncFavorites } from './modules/widget-bridge';
 import { loadUnits, saveUnits, loadOnboarded, saveOnboarded } from './lib/storage';
 import FirstRun from './components/FirstRun';
 import { formatAge, distanceMeters } from './lib/geo';
@@ -179,6 +180,48 @@ function AppInner() {
       })
       .filter(Boolean);
   }, [favIds, all, center]);
+
+  // Mirror favorites into the iOS App Group so the home-screen widget (and its
+  // config picker) can show the user's stations + live names without launching
+  // the app. Names come from GBFS, so wait until stations have loaded before
+  // writing (avoids clobbering the payload with name-less ids). No-op off iOS.
+  const favPayload = useMemo(() => {
+    if (!all.length) return null; // stations not loaded yet — don't overwrite
+    return favIds
+      .map((id) => {
+        const s = all.find((x) => x.id === id);
+        return s ? { id: s.id, name: s.name, shortName: s.shortName } : null;
+      })
+      .filter(Boolean);
+  }, [favIds, all]);
+
+  const favPayloadRef = useRef(favPayload);
+  useEffect(() => {
+    favPayloadRef.current = favPayload;
+    if (favPayload) syncFavorites(favPayload); // writes App Group + reloads widget
+  }, [favPayload]);
+
+  // Re-push on foreground: station names may have refreshed, and it's a cheap way
+  // to keep the widget's set current after the app has been backgrounded.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && favPayloadRef.current) syncFavorites(favPayloadRef.current);
+    });
+    return () => sub.remove();
+  }, []);
+
+  // Widget tap → pedl://station/<id>: open that station's sheet. Handles cold
+  // start (getInitialURL) and warm (listener). The sheet renders once `all`
+  // loads and chartStation resolves; close the trip planner so it's visible.
+  useEffect(() => {
+    const open = (url) => {
+      const m = url && /pedl:\/\/station\/([^/?#]+)/.exec(url);
+      if (m) { setSearching(false); setChartId(decodeURIComponent(m[1])); }
+    };
+    Linking.getInitialURL().then(open).catch(() => {});
+    const sub = Linking.addEventListener('url', ({ url }) => open(url));
+    return () => sub.remove();
+  }, []);
   // Nearby pool excludes favorites (no dupes); sort reorders within it. Collapsed
   // shows the nearest few; "Show all" expands to the full nearby set.
   const NEARBY_CAP = 6;

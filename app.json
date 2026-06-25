@@ -4,6 +4,7 @@
     "slug": "citibike",
     "owner": "dylanglatts-team",
     "version": "1.0.0",
+    "scheme": "pedl",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -16,6 +17,7 @@
     "updates": { "url": "https://u.expo.dev/8f994d05-f1d5-4f79-b314-7dcb32006f7f" },
     "ios": {
       "supportsTablet": true,
+      "appleTeamId": "KQHC679DFY",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Shows nearby stations and guides you while riding.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Keeps voice navigation running with the screen off.",
@@ -24,6 +26,11 @@
           "audio"
         ],
         "ITSAppUsesNonExemptEncryption": false
+      },
+      "entitlements": {
+        "com.apple.security.application-groups": [
+          "group.com.dylanglatt.citibike"
+        ]
       },
       "bundleIdentifier": "com.dylanglatt.citibike"
     },
@@ -58,7 +65,8 @@
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
-      ]
+      ],
+      "@bacons/apple-targets"
     ],
     "extra": {
       "eas": {
