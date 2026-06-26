@@ -7,11 +7,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#0B0F18"
-    },
     "runtimeVersion": "3",
     "updates": {
       "url": "https://u.expo.dev/8f994d05-f1d5-4f79-b314-7dcb32006f7f"
@@ -68,7 +63,16 @@
           "organization": "na-6q9",
           "project": "pedl"
         }
-      ]
+      ],
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/icon.png",
+          "resizeMode": "contain",
+          "backgroundColor": "#0B0F18"
+        }
+      ],
+      "expo-asset"
     ],
     "extra": {
       "eas": {
