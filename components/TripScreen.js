@@ -9,6 +9,7 @@ import FavoritesManager from './FavoritesManager';
 import ReorderPair from './ReorderPair';
 import { directions, WALK, BIKE } from '../lib/routing';
 import { arrivalLine } from '../lib/navPhrasing';
+import { collapseManeuvers } from '../lib/maneuvers';
 import { autocomplete, placeDetails } from '../lib/places';
 import { planTrip, planMultiTrip, fmtMin, fmtMiles } from '../lib/tripPlanner';
 import { getLocation } from '../lib/location';
@@ -59,7 +60,9 @@ async function buildRoute(origin, oStation, dStation, dest, opts = {}) {
     const name = dest && !dest.current ? (dest.name || dest.label) : null;
     maneuvers.push({ instruction: arrivalLine(name), location: at, distance: 0, kind: 'dest' });
   }
-  return { maneuvers, coords };
+  // Collapse to spoken decision points (turns + waypoints + leg departures);
+  // "continue on X" steps are folded away so a long straight isn't re-announced.
+  return { maneuvers: collapseManeuvers(maneuvers), coords };
 }
 
 // Concatenate per-segment routes for a multi-stop trip, inserting a "stop" cue

@@ -164,7 +164,7 @@ function AppInner() {
     (async () => {
       const [pl, un, onboarded, fv] = await Promise.all([loadPlaces(), loadUnits(), loadOnboarded(), loadFavStations()]);
       setPlaces(pl); setUnits(un); setFavIds(fv); await refresh();
-      SplashScreen.hideAsync().catch(() => {});
+      SplashScreen.hideAsync().catch(() => {}); // reveal the app once data is in
       if (onboarded && !FORCE_PRIMER) initLocation();
       else setShowPrimer(true); // defer the OS location prompt until they tap "Get started"
     })();

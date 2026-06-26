@@ -11,6 +11,7 @@ import { nav } from '../lib/voiceNav';
 import { startSim, stopSim } from '../lib/navSim';
 import { directions, WALK, BIKE } from '../lib/routing';
 import { arrivalLine, continuation, shortInstruction } from '../lib/navPhrasing';
+import { collapseManeuvers } from '../lib/maneuvers';
 import { openCitiBike } from '../lib/citibike';
 import { fmtMiles } from '../lib/tripPlanner';
 import { formatClock } from '../lib/geo';
@@ -147,7 +148,9 @@ async function rebuildFrom(here, waypoints) {
     maneuvers.push({ instruction: wp.instruction, location: wp.location, distance: 0, kind: wp.kind });
     anchor = target;
   }
-  return { maneuvers, coords };
+  // Same decision-point collapse as the initial route, so a reroute down a long
+  // street doesn't re-announce "continue on X" at every step.
+  return { maneuvers: collapseManeuvers(maneuvers), coords };
 }
 
 export default function NavScreen({ trip, onEnd }) {
