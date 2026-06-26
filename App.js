@@ -320,6 +320,9 @@ function AppInner() {
         </TouchableOpacity>
       )}
 
+      {/* Recenter button — pinned top-right, above the sheet (zIndex). The sheet's
+          largest detent stops below it (BottomSheet topReserve), so it's always
+          visible and never collides with the in-sheet filter menu. */}
       <TouchableOpacity
         style={[styles.locBtn, { top: insets.top + 10 }]}
         onPress={recenter}
@@ -335,7 +338,7 @@ function AppInner() {
         />
       </TouchableOpacity>
 
-      <BottomSheet index={sheetIndex} onIndexChange={setSheetIndex} renderHeader={Header} bottomInset={insets.bottom}>
+      <BottomSheet index={sheetIndex} onIndexChange={setSheetIndex} renderHeader={Header} bottomInset={insets.bottom} topReserve={insets.top + 64}>
         {searching ? (
           <TripScreen stations={all} onStartNav={setNavTrip} />
         ) : !loading && stations.length === 0 ? (
@@ -400,7 +403,7 @@ function makeStyles(c) {
 
     // Floating "recenter on me" button, top-right over the map.
     locBtn: {
-      position: 'absolute', right: 12, width: 42, height: 42, borderRadius: 21,
+      position: 'absolute', right: 12, width: 42, height: 42, borderRadius: 21, zIndex: 1001,
       backgroundColor: c.elevated, alignItems: 'center', justifyContent: 'center',
       borderWidth: StyleSheet.hairlineWidth, borderColor: c.border, ...shadow(c).card,
     },

@@ -4,10 +4,12 @@ import { useTheme, radius, shadow } from '../lib/theme';
 
 // Controlled draggable sheet. `index` selects a snap point (0 peek, 1 mid, 2 full);
 // dragging reports the new nearest snap via onIndexChange.
-export default function BottomSheet({ index = 1, onIndexChange, renderHeader, children, bottomInset = 0 }) {
+export default function BottomSheet({ index = 1, onIndexChange, renderHeader, children, bottomInset = 0, topReserve }) {
   const c = useTheme();
   const { height } = useWindowDimensions();
-  const MAX = Math.round(height * 0.9);
+  // The largest detent leaves `topReserve` px of map visible at the top, so floating
+  // controls (the recenter button) are never covered by the sheet. Falls back to 10%.
+  const MAX = Math.round(height - (topReserve ?? height * 0.1));
   const snaps = useMemo(() => [Math.round(height * 0.16), Math.round(height * 0.52), MAX], [height, MAX]);
   const toY = (visible) => MAX - visible;
 
