@@ -12,8 +12,10 @@
       "resizeMode": "contain",
       "backgroundColor": "#0B0F18"
     },
-    "runtimeVersion": "2",
-    "updates": { "url": "https://u.expo.dev/8f994d05-f1d5-4f79-b314-7dcb32006f7f" },
+    "runtimeVersion": "3",
+    "updates": {
+      "url": "https://u.expo.dev/8f994d05-f1d5-4f79-b314-7dcb32006f7f"
+    },
     "ios": {
       "supportsTablet": true,
       "infoPlist": {
@@ -58,7 +60,16 @@
           "isAndroidBackgroundLocationEnabled": true,
           "isAndroidForegroundServiceEnabled": true
         }
-      ]
+      ],
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "organization": "na-6q9",
+          "project": "pedl"
+        }
+      ],
+      "@sentry/react-native"
     ],
     "extra": {
       "eas": {

@@ -1,15 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, Modal, StyleSheet,
-  KeyboardAvoidingView, Platform, ActivityIndicator, Linking,
+  KeyboardAvoidingView, Platform, ActivityIndicator, Linking, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Updates from 'expo-updates';
+import * as Sentry from '@sentry/react-native';
 import Icon from './Icon';
 import Logo from './Logo';
 import { useTheme, radius, shadow } from '../lib/theme';
-import { FEEDBACK_WEBHOOK, PRIVACY_URL } from '../lib/config';
+import { FEEDBACK_WEBHOOK, PRIVACY_URL, DEBUG_TEST_CRASH } from '../lib/config';
 import app from '../app.json';
 
 const VERSION = app?.expo?.version || '?';
@@ -167,6 +168,22 @@ export default function Feedback({ visible, screen, onClose }) {
                   </Text>
                   {`   ·   Pedl v${VERSION}`}
                 </Text>
+                {DEBUG_TEST_CRASH && (
+                  <TouchableOpacity
+                    style={styles.testCrash}
+                    onPress={() => {
+                      Sentry.captureException(new Error('Pedl test crash (debug button)'));
+                      Alert.alert(
+                        'Test event sent to Sentry',
+                        'If reporting is working, it should appear in your #crashes channel within a minute. Remember to turn this button off (DEBUG_TEST_CRASH) before the public release.'
+                      );
+                    }}
+                    activeOpacity={0.7}
+                    accessibilityRole="button"
+                  >
+                    <Text style={styles.testCrashTxt}>Send test crash (debug)</Text>
+                  </TouchableOpacity>
+                )}
               </>
             )}
           </View>
@@ -202,5 +219,7 @@ function makeStyles(c) {
     doneTitle: { fontSize: 20, fontWeight: '800', color: c.text },
     doneSub: { fontSize: 14, color: c.textMute, marginBottom: 12, textAlign: 'center', lineHeight: 20 },
     doneBtn: { alignSelf: 'stretch', marginTop: 2 },
+    testCrash: { alignSelf: 'center', marginTop: 12, paddingVertical: 6, paddingHorizontal: 12 },
+    testCrashTxt: { fontSize: 12, color: c.textFaint, fontWeight: '600', textDecorationLine: 'underline' },
   });
 }

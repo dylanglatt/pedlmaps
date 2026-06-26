@@ -24,6 +24,20 @@ import { loadUnits, saveUnits, loadOnboarded, saveOnboarded } from './lib/storag
 import FirstRun from './components/FirstRun';
 import { formatAge, distanceMeters } from './lib/geo';
 import { useTheme, radius, shadow } from './lib/theme';
+import * as Sentry from '@sentry/react-native';
+import { SENTRY_DSN } from './lib/config';
+
+// Crash + error reporting. No-op when SENTRY_DSN is empty (web preview, or before
+// the project exists) and disabled in dev so local work never pollutes the dashboard
+// — TestFlight/production builds aren't __DEV__, so they report normally. To smoke-test
+// that events arrive, temporarily set `enabled: true` and trigger an error.
+if (SENTRY_DSN) {
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    enabled: !__DEV__,
+    tracesSampleRate: 0.2, // light performance sampling for a beta; raise later if useful
+  });
+}
 
 // Name a custom place. Alert.prompt is iOS-only; elsewhere we fall back to the
 // station name (the saved-places edit flow will cover renaming later).
@@ -71,13 +85,33 @@ const REFRESH_MS = 45000;
 // __DEV__-gated, so production builds are NEVER affected. Flip to `&& false` when done.
 const FORCE_PRIMER = __DEV__ && false;
 
-export default function App() {
+// Last-resort fallback if a render error escapes everything else: show a calm
+// message instead of a blank white screen. Sentry has already captured the error
+// by the time this renders. Colors are hardcoded (matches the splash) because the
+// theme provider may itself be the thing that failed.
+function CrashFallback() {
+  return (
+    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#0B0F18', padding: 24 }}>
+      <Text style={{ color: '#FFFFFF', fontSize: 17, fontWeight: '700', marginBottom: 6 }}>Something went wrong</Text>
+      <Text style={{ color: '#9AA3B2', fontSize: 14, textAlign: 'center', lineHeight: 20 }}>
+        Pedl hit an unexpected error and the team has been notified. Please close and reopen the app.
+      </Text>
+    </View>
+  );
+}
+
+function App() {
   return (
     <SafeAreaProvider>
-      <AppInner />
+      <Sentry.ErrorBoundary fallback={<CrashFallback />}>
+        <AppInner />
+      </Sentry.ErrorBoundary>
     </SafeAreaProvider>
   );
 }
+
+// Sentry.wrap enables native crash + performance instrumentation around the root.
+export default Sentry.wrap(App);
 
 function AppInner() {
   const c = useTheme();
