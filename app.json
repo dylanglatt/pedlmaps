@@ -68,8 +68,7 @@
           "organization": "na-6q9",
           "project": "pedl"
         }
-      ],
-      "@sentry/react-native"
+      ]
     ],
     "extra": {
       "eas": {
