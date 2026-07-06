@@ -486,12 +486,18 @@ export default function TripScreen({ stations, onStartNav }) {
         )}
       </View>
 
-      <View style={styles.prefRow}>
-        {[{ k: 'foot', label: 'On foot' }, { k: 'riding', label: 'Already riding' }].map((o) => (
-          <TouchableOpacity key={o.k} style={[styles.pref, mode === o.k && styles.prefOn]} onPress={() => changeMode(o.k)} activeOpacity={0.85}>
-            <Text style={[styles.prefTxt, mode === o.k && styles.prefTxtOn]}>{o.label}</Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.modeRow}>
+        <TouchableOpacity
+          style={[styles.modeChip, mode === 'riding' && styles.modeChipOn]}
+          onPress={() => changeMode(mode === 'riding' ? 'foot' : 'riding')}
+          activeOpacity={0.8}
+          accessibilityRole="button"
+          accessibilityState={{ selected: mode === 'riding' }}
+          accessibilityLabel="Already on a bike"
+        >
+          <Icon name="bike" size={14} color={mode === 'riding' ? '#fff' : c.textMute} />
+          <Text style={[styles.modeChipTxt, mode === 'riding' && styles.modeChipTxtOn]}>Already on a bike</Text>
+        </TouchableOpacity>
       </View>
 
       {mode !== 'riding' && (
@@ -670,6 +676,13 @@ function makeStyles(c) {
     prefOn: { backgroundColor: c.elevated, ...shadow(c).card },
     prefTxt: { fontSize: 13, fontWeight: '600', color: c.textMute },
     prefTxtOn: { color: c.text },
+    // Compact opt-in chip for "already on a bike" — deliberately small/right-aligned
+    // so it doesn't compete with the primary bike-type filter.
+    modeRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 6, marginHorizontal: 16 },
+    modeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, paddingVertical: 6, borderRadius: radius.sm, backgroundColor: c.surfaceAlt },
+    modeChipOn: { backgroundColor: c.primary },
+    modeChipTxt: { fontSize: 12.5, fontWeight: '600', color: c.textMute },
+    modeChipTxtOn: { color: '#fff' },
     errRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginHorizontal: 16 },
     err: { color: c.danger, fontSize: 13, fontWeight: '600', flex: 1 },
     retry: { color: c.primary, fontSize: 13, fontWeight: '700' },
