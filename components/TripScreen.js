@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator,
-  StyleSheet, Platform, Keyboard, Alert,
+  StyleSheet, Platform, Keyboard, Alert, Switch,
 } from 'react-native';
 import Icon from './Icon';
 import SavedPlacesRow from './SavedPlacesRow';
@@ -486,20 +486,6 @@ export default function TripScreen({ stations, onStartNav }) {
         )}
       </View>
 
-      <View style={styles.modeRow}>
-        <TouchableOpacity
-          style={[styles.modeChip, mode === 'riding' && styles.modeChipOn]}
-          onPress={() => changeMode(mode === 'riding' ? 'foot' : 'riding')}
-          activeOpacity={0.8}
-          accessibilityRole="button"
-          accessibilityState={{ selected: mode === 'riding' }}
-          accessibilityLabel="Already on a bike"
-        >
-          <Icon name="bike" size={14} color={mode === 'riding' ? '#fff' : c.textMute} />
-          <Text style={[styles.modeChipTxt, mode === 'riding' && styles.modeChipTxtOn]}>Already on a bike</Text>
-        </TouchableOpacity>
-      </View>
-
       {mode !== 'riding' && (
         <View style={styles.prefRow}>
           {[{ k: 'any', label: 'Any bike' }, { k: 'classic', label: 'Classic' }, { k: 'ebike', label: 'E-bike' }].map((o) => (
@@ -509,6 +495,17 @@ export default function TripScreen({ stations, onStartNav }) {
           ))}
         </View>
       )}
+
+      <View style={styles.optionRow}>
+        <Icon name="bike" size={18} color={c.textMute} />
+        <Text style={styles.optionTxt}>Already on a bike</Text>
+        <Switch
+          value={mode === 'riding'}
+          onValueChange={(v) => changeMode(v ? 'riding' : 'foot')}
+          trackColor={{ true: c.primary }}
+          accessibilityLabel="Already on a bike"
+        />
+      </View>
 
       {busy && <ActivityIndicator color={c.primary} style={{ marginTop: 20 }} />}
       {error && !busy && (
@@ -676,13 +673,10 @@ function makeStyles(c) {
     prefOn: { backgroundColor: c.elevated, ...shadow(c).card },
     prefTxt: { fontSize: 13, fontWeight: '600', color: c.textMute },
     prefTxtOn: { color: c.text },
-    // Compact opt-in chip for "already on a bike" — deliberately small/right-aligned
-    // so it doesn't compete with the primary bike-type filter.
-    modeRow: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 6, marginHorizontal: 16 },
-    modeChip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 11, paddingVertical: 6, borderRadius: radius.sm, backgroundColor: c.surfaceAlt },
-    modeChipOn: { backgroundColor: c.primary },
-    modeChipTxt: { fontSize: 12.5, fontWeight: '600', color: c.textMute },
-    modeChipTxtOn: { color: '#fff' },
+    // "Already on a bike" — a quiet settings-style row (icon + label + Switch),
+    // mirroring the voice-guidance toggle on the nav screen so it feels native.
+    optionRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 8, marginHorizontal: 16, paddingHorizontal: 14, paddingVertical: 6, backgroundColor: c.surface, borderRadius: radius.md },
+    optionTxt: { flex: 1, fontSize: 14, color: c.text, fontWeight: '600' },
     errRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 10, marginHorizontal: 16 },
     err: { color: c.danger, fontSize: 13, fontWeight: '600', flex: 1 },
     retry: { color: c.primary, fontSize: 13, fontWeight: '700' },
