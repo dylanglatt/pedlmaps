@@ -14,7 +14,8 @@ import { arrivalLine, continuation, shortInstruction } from '../lib/navPhrasing'
 import { collapseManeuvers } from '../lib/maneuvers';
 import { openCitiBike } from '../lib/citibike';
 import { fmtMiles } from '../lib/tripPlanner';
-import { formatClock } from '../lib/geo';
+import { formatClock, distanceMeters } from '../lib/geo';
+import { NAV } from '../lib/config';
 import { useTheme, radius, shadow } from '../lib/theme';
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -83,20 +84,22 @@ const ROW = {
 // Walk to your pickup station / Bike ride / Dock your bike / Walk to <dest> /
 // Arrive. Each row carries the maneuver index range it spans so the live current
 // step still highlights the right row. Turn-by-turn lives in the banner.
-function buildSteps(maneuvers, dest, stations = {}) {
+function buildSteps(maneuvers, dest, stations = {}, opts = {}) {
   const ms = maneuvers || [];
   const pickups = stations.pickups || []; // station names in order of use
   const docks = stations.docks || [];
   let pIdx = 0, dIdx = 0;
   const out = [];
-  let mode = 'walk';
+  // Already-riding trips have no walk-to-pickup leg: the ride starts at maneuver 0,
+  // so begin in bike mode with the accumulator already open.
+  let mode = opts.fromBike ? 'bike' : 'walk';
   let walk = null; // { fromIdx, toIdx, distance }
-  let bike = null; // { fromIdx, toIdx, distance }
+  let bike = opts.fromBike ? { fromIdx: 0, toIdx: 0, distance: 0 } : null;
   const flushWalk = (label) => {
     if (walk) { out.push({ kind: 'walk', label, distance: walk.distance, fromIdx: walk.fromIdx, toIdx: walk.toIdx }); walk = null; }
   };
   const flushBike = () => {
-    if (bike) { out.push({ kind: 'ride', label: 'Bike ride', distance: bike.distance, fromIdx: bike.fromIdx, toIdx: bike.toIdx }); bike = null; }
+    if (bike) { out.push({ kind: 'ride', label: opts.fromBike ? 'Ride from here' : 'Bike ride', distance: bike.distance, fromIdx: bike.fromIdx, toIdx: bike.toIdx }); bike = null; }
   };
   for (let i = 0; i < ms.length; i++) {
     const m = ms[i];
@@ -171,6 +174,11 @@ export default function NavScreen({ trip, onEnd }) {
   const [stepsOpen, setStepsOpen] = useState(false); // banner expanded into full step list
   const [curIndex, setCurIndex] = useState(0);
   const [voiceOn, setVoiceOn] = useState(!nav.muted);
+  // Undock CTA persistence: a sticky "at the pickup rack" flag so the unlock button
+  // stays up while you're standing there undocking, and only clears once you've
+  // ridden away — instead of vanishing the moment the pickup geofence trips.
+  const [atRack, setAtRack] = useState(false);
+  const pickupLocRef = useRef(null); // [lat,lon] of the pickup we're currently at
   const arrival = useRef(new Date(Date.now() + plan.totalSec * 1000)).current;
   const [minLeft, setMinLeft] = useState(Math.max(1, Math.round(plan.totalSec / 60)));
   const tick = useRef(null);
@@ -179,9 +187,24 @@ export default function NavScreen({ trip, onEnd }) {
     nav.start({
       maneuvers: route.maneuvers,
       routeCoords: route.coords,
-      intro: `Starting route to ${dest?.name || dest?.label || 'your destination'}.`,
-      onProgress: ({ maneuver, next: nx, distance, index }) => { setCur(maneuver); setNext(nx); setDist(distance); if (typeof index === 'number') setCurIndex(index); },
-      onLocationUpdate: (h) => setHere(h),
+      intro: plan.fromBike
+        ? `Head to your dock at ${plan.destStation?.name || 'the station'}.`
+        : `Starting route to ${dest?.name || dest?.label || 'your destination'}.`,
+      onProgress: ({ maneuver, next: nx, distance, index }) => {
+        setCur(maneuver); setNext(nx); setDist(distance); if (typeof index === 'number') setCurIndex(index);
+        // Remember which pickup we're heading to so the undock CTA can stick to it.
+        const up = isUnlockStep(maneuver) ? maneuver : isUnlockStep(nx) ? nx : null;
+        if (up && up.location) pickupLocRef.current = up.location;
+      },
+      onLocationUpdate: (h) => {
+        setHere(h);
+        const pl = pickupLocRef.current;
+        if (pl) {
+          const d = distanceMeters(h.lat, h.lon, pl[0], pl[1]);
+          if (d <= NAV.arriveZoneM) setAtRack(true);            // at the rack — arm
+          else if (d > NAV.undockClearM) { setAtRack(false); pickupLocRef.current = null; } // rode off — clear
+        }
+      },
       onReroute: async (h) => {
         try {
           const wps = nav.remainingWaypoints();
@@ -232,10 +255,9 @@ export default function NavScreen({ trip, onEnd }) {
     (plan.points || []).slice(1, -1).forEach((pt, i) => markers.push({ lat: pt.lat, lon: pt.lon, title: pt.name || 'Stop', color: c.primary, kind: 'stop', num: i + 1 }));
     if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.danger, kind: 'dest' });
   } else {
-    markers.push(
-      { lat: plan.originStation.lat, lon: plan.originStation.lon, title: 'Pick up', color: c.good, kind: 'pickup' },
-      { lat: plan.destStation.lat, lon: plan.destStation.lon, title: 'Dock', color: c.dock, kind: 'dock' },
-    );
+    // Already-riding trips have no pickup station — start straight at the dock.
+    if (plan.originStation) markers.push({ lat: plan.originStation.lat, lon: plan.originStation.lon, title: 'Pick up', color: c.good, kind: 'pickup' });
+    markers.push({ lat: plan.destStation.lat, lon: plan.destStation.lon, title: 'Dock', color: c.dock, kind: 'dock' });
     if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.danger, kind: 'dest' });
   }
   const distLabel = fmtDist(dist);
@@ -246,7 +268,7 @@ export default function NavScreen({ trip, onEnd }) {
       docks: segs.map((s) => s.destStation && s.destStation.name),
     };
   }, [plan]);
-  const steps = useMemo(() => buildSteps(maneuvers, dest, stationNames), [maneuvers, dest, stationNames]);
+  const steps = useMemo(() => buildSteps(maneuvers, dest, stationNames, { fromBike: plan.fromBike }), [maneuvers, dest, stationNames, plan.fromBike]);
 
   return (
     <Modal visible animationType="slide" presentationStyle="fullScreen" onRequestClose={() => { nav.stop(); onEnd && onEnd(); }}>
@@ -287,7 +309,7 @@ export default function NavScreen({ trip, onEnd }) {
                 </View>
                 <Icon name="forward" size={16} color="rgba(255,255,255,0.45)" />
               </View>
-              {(isUnlockStep(cur) || isUnlockStep(next)) ? (
+              {(isUnlockStep(cur) || isUnlockStep(next) || atRack) ? (
                 <TouchableOpacity style={styles.unlockCue} onPress={openCitiBike} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel="Open Citi Bike to unlock">
                   <Icon name="unlock" size={17} color="#fff" />
                   <Text style={styles.unlockCueTxt} numberOfLines={1}>Undock your bike — tap to open Citi Bike</Text>

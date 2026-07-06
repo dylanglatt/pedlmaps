@@ -11,7 +11,7 @@ import { directions, WALK, BIKE } from '../lib/routing';
 import { arrivalLine } from '../lib/navPhrasing';
 import { collapseManeuvers } from '../lib/maneuvers';
 import { autocomplete, placeDetails } from '../lib/places';
-import { planTrip, planMultiTrip, fmtMin, fmtMiles } from '../lib/tripPlanner';
+import { planTrip, planMultiTrip, planFromBike, fmtMin, fmtMiles } from '../lib/tripPlanner';
 import { getLocation } from '../lib/location';
 import { loadRecents, addRecent, removeRecent, clearRecents, loadMembership, saveMembership } from '../lib/storage';
 import { estimateCost, fmtUSD } from '../lib/fares';
@@ -65,6 +65,28 @@ async function buildRoute(origin, oStation, dStation, dest, opts = {}) {
   return { maneuvers: collapseManeuvers(maneuvers), coords };
 }
 
+// Already on a bike: ride straight from where you are to the dock, then walk in.
+// No walk-to-pickup leg and no undock waypoint — the ride is maneuver 0.
+async function buildRouteFromBike(origin, dStation, dest, opts = {}) {
+  const legs = await Promise.all([
+    directions(BIKE, [lonlat(origin), lonlat(dStation)]),
+    directions(WALK, [lonlat(dStation), lonlat(dest)]),
+  ]);
+  const maneuvers = [];
+  const coords = [];
+  maneuvers.push(...legs[0].maneuvers);
+  coords.push(...legs[0].coords);
+  maneuvers.push({ instruction: 'Dock your bike, then walk to your destination.', location: legs[1].maneuvers[0]?.location || coords[coords.length - 1], distance: 0, kind: 'dock' });
+  maneuvers.push(...legs[1].maneuvers);
+  coords.push(...legs[1].coords);
+  if (opts.finalDest !== false) {
+    const at = (dest && dest.lat != null) ? [dest.lat, dest.lon] : coords[coords.length - 1];
+    const name = dest && !dest.current ? (dest.name || dest.label) : null;
+    maneuvers.push({ instruction: arrivalLine(name), location: at, distance: 0, kind: 'dest' });
+  }
+  return { maneuvers: collapseManeuvers(maneuvers), coords };
+}
+
 // Concatenate per-segment routes for a multi-stop trip, inserting a "stop" cue
 // between segments. points = [origin, ...stops, dest]; segments aligns to gaps.
 async function buildMultiRoute(points, segments) {
@@ -100,6 +122,8 @@ export default function TripScreen({ stations, onStartNav }) {
   const [dest, setDest] = useState(null);
   const [stop, setStop] = useState(null);        // single intermediate stop (cap 1)
   const [prefer, setPrefer] = useState('any');
+  const [mode, setMode] = useState('foot'); // 'foot' | 'riding' (already on a bike)
+  const modeRef = useRef('foot');           // latest mode for runPlan without dep churn
   const [plan, setPlan] = useState(null);        // current route: { kind:'single'|'multi', ... }
   const [points, setPoints] = useState(null);    // [origin, ...stops, dest] for multi-stop nav
   const [route, setRoute] = useState(null);
@@ -134,7 +158,12 @@ export default function TripScreen({ stations, onStartNav }) {
     setBusy(true); setError(null); setPlan(null); setPoints(null); setRoute(null);
     const clean = (midsArr || []).filter(Boolean);
     try {
-      if (clean.length === 0) {
+      if (modeRef.current === 'riding' && clean.length === 0) {
+        const { best } = await planFromBike({ origin: org, dest: d, stations, prefer: pref });
+        setPlan({ ...best, kind: 'single' });
+        try { setRoute(await buildRouteFromBike(org, best.destStation, d, { finalDest: true })); }
+        catch { setRoute(null); }
+      } else if (clean.length === 0) {
         const { best } = await planTrip({ origin: org, dest: d, stations, prefer: pref });
         setPlan({ ...best, kind: 'single' });
         try { setRoute(await buildRoute(org, best.originStation, best.destStation, d, { finalDest: true })); }
@@ -234,6 +263,15 @@ export default function TripScreen({ stations, onStartNav }) {
     if (origin && dest) runPlan(origin, stop ? [stop] : [], dest, p);
   }, [origin, dest, stop, runPlan]);
 
+  // On foot vs. already on a bike. Riding trips are single-leg (no intermediate
+  // stop), so switching to riding clears any stop and re-plans dock-only.
+  const changeMode = useCallback((m) => {
+    modeRef.current = m; setMode(m);
+    const keepStop = m === 'riding' ? null : stop;
+    if (m === 'riding' && stop) setStop(null);
+    if (origin && dest) runPlan(origin, keepStop ? [keepStop] : [], dest, prefer);
+  }, [origin, dest, stop, prefer, runPlan]);
+
   // Re-run the current plan after a failure (network blip, no bike/dock, etc.).
   const retryPlan = useCallback(() => {
     if (origin && dest) runPlan(origin, stop ? [stop] : [], dest, prefer);
@@ -277,7 +315,9 @@ export default function TripScreen({ stations, onStartNav }) {
     let r = route;
     if (!r) {
       setBusy(true);
-      try { r = await buildRoute(origin, current.originStation, current.destStation, dest, { finalDest: true }); }
+      try { r = current.fromBike
+        ? await buildRouteFromBike(origin, current.destStation, dest, { finalDest: true })
+        : await buildRoute(origin, current.originStation, current.destStation, dest, { finalDest: true }); }
       catch (e) { setError(e.message || 'Could not start'); setBusy(false); return; }
       setBusy(false);
     }
@@ -433,22 +473,36 @@ export default function TripScreen({ stations, onStartNav }) {
               <Text style={styles.odTxt} numberOfLines={1}>{dest?.name}</Text>
               <Icon name="forward" size={16} color={c.textFaint} />
             </TouchableOpacity>
-            <View style={styles.odDivider} />
-            <TouchableOpacity style={styles.addStopRow} onPress={openStop} activeOpacity={0.7}>
-              <Icon name="add" size={18} color={c.primary} />
-              <Text style={styles.addStopTxt}>Add a stop</Text>
-            </TouchableOpacity>
+            {mode !== 'riding' && (
+              <>
+                <View style={styles.odDivider} />
+                <TouchableOpacity style={styles.addStopRow} onPress={openStop} activeOpacity={0.7}>
+                  <Icon name="add" size={18} color={c.primary} />
+                  <Text style={styles.addStopTxt}>Add a stop</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </>
         )}
       </View>
 
       <View style={styles.prefRow}>
-        {[{ k: 'any', label: 'Any bike' }, { k: 'classic', label: 'Classic' }, { k: 'ebike', label: 'E-bike' }].map((o) => (
-          <TouchableOpacity key={o.k} style={[styles.pref, prefer === o.k && styles.prefOn]} onPress={() => changePrefer(o.k)} activeOpacity={0.85}>
-            <Text style={[styles.prefTxt, prefer === o.k && styles.prefTxtOn]}>{o.label}</Text>
+        {[{ k: 'foot', label: 'On foot' }, { k: 'riding', label: 'Already riding' }].map((o) => (
+          <TouchableOpacity key={o.k} style={[styles.pref, mode === o.k && styles.prefOn]} onPress={() => changeMode(o.k)} activeOpacity={0.85}>
+            <Text style={[styles.prefTxt, mode === o.k && styles.prefTxtOn]}>{o.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
+
+      {mode !== 'riding' && (
+        <View style={styles.prefRow}>
+          {[{ k: 'any', label: 'Any bike' }, { k: 'classic', label: 'Classic' }, { k: 'ebike', label: 'E-bike' }].map((o) => (
+            <TouchableOpacity key={o.k} style={[styles.pref, prefer === o.k && styles.prefOn]} onPress={() => changePrefer(o.k)} activeOpacity={0.85}>
+              <Text style={[styles.prefTxt, prefer === o.k && styles.prefTxtOn]}>{o.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
 
       {busy && <ActivityIndicator color={c.primary} style={{ marginTop: 20 }} />}
       {error && !busy && (
@@ -511,6 +565,12 @@ export default function TripScreen({ stations, onStartNav }) {
                   </React.Fragment>
                 );
               })
+            : current.fromBike
+            ? [
+                <Step key="ride" icon="bike" time={fmtMin(current.rideSec)} title="Ride from here" styles={styles} c={c} />,
+                <Step key="dock" icon="dock" title={`Dock at ${current.destStation.name}`} sub={`${current.destStation.docks} open docks`} styles={styles} c={c} />,
+                <Step key="w2" icon="walk" time={fmtMin(current.walkToDestSec)} title={`Walk to ${dest?.name || 'your destination'}`} last styles={styles} c={c} />,
+              ]
             : [
                 <Step key="w1" icon="walk" time={fmtMin(current.walkToBikeSec)} title={`Walk to ${current.originStation.name}`} sub={`${current.originStation.classic} classic · ${current.originStation.ebikes} e-bikes`} styles={styles} c={c} />,
                 <Step key="ride" icon="bike" time={fmtMin(current.rideSec)} title="Ride" sub={current.bikeType === 'ebike' ? 'e-bike' : 'classic'} subColor={current.bikeType === 'ebike' ? c.ebike : c.classic} styles={styles} c={c} />,
