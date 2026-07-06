@@ -44,6 +44,15 @@ export default function Feedback({ visible, screen, onClose }) {
   const [email, setEmail] = useState('');
   const [status, setStatus] = useState('idle'); // idle | sending | sent | error
   const diag = diagnostics(screen);
+  // Which JS bundle is live: the OTA update id (short) or 'base' for the embedded
+  // bundle — shown in the footer so a pushed update is verifiable at a glance, and
+  // long-pressable for the full detail (publish time, channel).
+  const build = Updates.isEmbeddedLaunch ? 'base' : ((Updates.updateId || '').slice(0, 7) || 'dev');
+  const buildInfo = () => {
+    const when = Updates.createdAt ? new Date(Updates.createdAt).toLocaleString() : '—';
+    const src = Updates.isEmbeddedLaunch ? 'Embedded (no OTA yet)' : 'OTA update';
+    Alert.alert('Build info', `Source:    ${src}\nUpdate:    ${(Updates.updateId || '').slice(0, 8) || '—'}\nPublished: ${when}\nChannel:   ${Updates.channel || '—'}\nRuntime:   rt${RUNTIME}\nApp:       v${VERSION}`);
+  };
 
   // Remember name/email across reports.
   useEffect(() => {
@@ -166,7 +175,10 @@ export default function Feedback({ visible, screen, onClose }) {
                   >
                     Privacy Policy
                   </Text>
-                  {`   ·   Pedl v${VERSION}`}
+                  {'   ·   '}
+                  <Text onLongPress={buildInfo} accessibilityRole="button" accessibilityLabel="Build info">
+                    {`Pedl v${VERSION} · ${build}`}
+                  </Text>
                 </Text>
                 {DEBUG_TEST_CRASH && (
                   <TouchableOpacity
