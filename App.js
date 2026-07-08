@@ -6,7 +6,6 @@ import {
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as SplashScreen from 'expo-splash-screen';
-import * as Updates from 'expo-updates';
 
 import StationMap from './components/StationMap';
 import StationList from './components/StationList';
@@ -27,16 +26,6 @@ import { formatAge, distanceMeters } from './lib/geo';
 import { useTheme, radius, shadow } from './lib/theme';
 import * as Sentry from '@sentry/react-native';
 import { SENTRY_DSN } from './lib/config';
-
-// Long-press the BETA pill to see which JS bundle is actually running — embedded vs
-// OTA, plus the update id and publish time. A quick way to confirm a pushed EAS
-// Update actually reached this device (esp. on TestFlight, where there's no dev menu).
-function showBuildInfo() {
-  const short = Updates.updateId ? Updates.updateId.slice(0, 8) : '—';
-  const when = Updates.createdAt ? new Date(Updates.createdAt).toLocaleString() : '—';
-  const src = Updates.isEmbeddedLaunch ? 'Embedded (no OTA yet)' : 'OTA update';
-  Alert.alert('Build info', `Source:    ${src}\nUpdate:    ${short}\nPublished: ${when}\nChannel:   ${Updates.channel || '—'}\nRuntime:   ${Updates.runtimeVersion || '—'}`);
-}
 
 // Crash + error reporting. No-op when SENTRY_DSN is empty (web preview, or before
 // the project exists) and disabled in dev so local work never pollutes the dashboard
@@ -275,7 +264,7 @@ function AppInner() {
       <View style={styles.planHead}>
         <View style={styles.titleRow}>
           <Text style={styles.planTitle}>Plan a trip</Text>
-          <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Plan a trip')} onLongPress={showBuildInfo} activeOpacity={0.8} hitSlop={6} accessibilityRole="button" accessibilityLabel="Send feedback">
+          <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Plan a trip')} activeOpacity={0.8} hitSlop={6} accessibilityRole="button" accessibilityLabel="Send feedback">
             <Icon name="chat" size={11} color={c.onPrimary} />
             <Text style={styles.betaTxt}>BETA</Text>
           </TouchableOpacity>
@@ -287,7 +276,7 @@ function AppInner() {
     ) : (
       <View style={styles.browseHead}>
         <View style={styles.headTop}>
-          <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Nearby')} onLongPress={showBuildInfo} activeOpacity={0.8} hitSlop={6} accessibilityRole="button" accessibilityLabel="Send feedback">
+          <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Nearby')} activeOpacity={0.8} hitSlop={6} accessibilityRole="button" accessibilityLabel="Send feedback">
             <Icon name="chat" size={11} color={c.onPrimary} />
             <Text style={styles.betaTxt}>BETA</Text>
           </TouchableOpacity>
