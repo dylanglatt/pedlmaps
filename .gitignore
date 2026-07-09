@@ -35,11 +35,13 @@ yarn-error.*
 scripts/__pycache__/
 scripts/snapshots.csv
 scripts/*.csv
+*.db
 out/
 snap/
 
 # Local modeling artifacts (data lives in the pedl-data repo, not here)
 pedl-data/
+combined.csv
 combined.parquet
 *.parquet
 assets/pedl logo.png

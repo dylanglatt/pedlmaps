@@ -17,8 +17,9 @@ CLI:
     --out     also write the combined table to FILE (.parquet or .csv.gz)
 
 As a library:
-  from combine import load
-  df = load("pedl-data/data")
+  from combine import load_db
+  df = load_db()              # reads the SQLite DB at $PEDL_DB (default ~/pedl.db)
+  # (or load("pedl-data/data") to read the legacy *.csv.gz archive)
   # df has a tz-aware `ts` (America/New_York) + a derived `minute` column,
   # sorted by station then time — so per-station deltas/slope are a groupby away:
   #   df["ebikes_delta"] = df.groupby("short_name")["ebikes"].diff()
@@ -26,6 +27,7 @@ As a library:
 import argparse
 import glob
 import os
+import sqlite3
 import sys
 
 import pandas as pd
@@ -34,29 +36,33 @@ COLS = ["ts_iso", "js_day", "hour", "short_name", "capacity",
         "bikes", "ebikes", "classic", "docks"]
 NUM_COLS = ["js_day", "hour", "capacity", "bikes", "ebikes", "classic", "docks"]
 
+PEDL_DB = os.path.expanduser(os.environ.get("PEDL_DB", "~/pedl.db"))
 
-def load(data_dir: str = "data") -> pd.DataFrame:
-    """Read every *.csv.gz snapshot under data_dir into one clean DataFrame.
+DDL = """CREATE TABLE IF NOT EXISTS snapshots (
+    ts_iso     TEXT,
+    js_day     INTEGER,
+    hour       INTEGER,
+    short_name TEXT,
+    capacity   INTEGER,
+    bikes      INTEGER,
+    ebikes     INTEGER,
+    classic    INTEGER,
+    docks      INTEGER,
+    UNIQUE(short_name, ts_iso)
+)"""
+INDEX = "CREATE INDEX IF NOT EXISTS idx_snapshots_station_ts ON snapshots(short_name, ts_iso)"
 
-    Column names are supplied explicitly (header=None) so this works whether or
-    not a file carries a header row — any stray header line reads as a data row
-    and is dropped below when its timestamp fails to parse.
-    """
-    paths = sorted(glob.glob(os.path.join(data_dir, "*.csv.gz")))
-    if not paths:
-        raise SystemExit(f"No *.csv.gz snapshots found in {data_dir!r}")
 
-    frames = []
-    for p in paths:
-        try:
-            frames.append(pd.read_csv(p, header=None, names=COLS,
-                                      dtype={"short_name": str}))
-        except Exception as e:  # a half-written file shouldn't sink the whole load
-            print(f"skip {os.path.basename(p)}: {e}", file=sys.stderr)
-    if not frames:
-        raise SystemExit("No snapshots could be read.")
+def ensure_schema(conn: sqlite3.Connection) -> None:
+    """Create the snapshots table + index if they don't exist. Shared by every
+    writer/reader so the schema lives in exactly one place."""
+    conn.execute(DDL)
+    conn.execute(INDEX)
 
-    df = pd.concat(frames, ignore_index=True)
+
+def _tidy(df: pd.DataFrame) -> pd.DataFrame:
+    """Post-process a raw frame (columns == COLS) into the modeling-ready shape:
+    numeric coercion, tz-aware `ts` + `minute`, deduped, sorted by station then time."""
     df = df[df["ts_iso"] != "ts_iso"]  # drop header rows from any headered files
     for c in NUM_COLS:
         if c in df.columns:
@@ -75,16 +81,60 @@ def load(data_dir: str = "data") -> pd.DataFrame:
     return df
 
 
+def load(data_dir: str = "data") -> pd.DataFrame:
+    """Read every *.csv.gz snapshot under data_dir into one clean DataFrame.
+
+    Column names are supplied explicitly (header=None) so this works whether or
+    not a file carries a header row — any stray header line reads as a data row
+    and is dropped in _tidy when its timestamp fails to parse. Still used by
+    backfill_sqlite.py to import the legacy pedl-data archive.
+    """
+    paths = sorted(glob.glob(os.path.join(data_dir, "*.csv.gz")))
+    if not paths:
+        raise SystemExit(f"No *.csv.gz snapshots found in {data_dir!r}")
+
+    frames = []
+    for p in paths:
+        try:
+            frames.append(pd.read_csv(p, header=None, names=COLS,
+                                      dtype={"short_name": str}))
+        except Exception as e:  # a half-written file shouldn't sink the whole load
+            print(f"skip {os.path.basename(p)}: {e}", file=sys.stderr)
+    if not frames:
+        raise SystemExit("No snapshots could be read.")
+
+    return _tidy(pd.concat(frames, ignore_index=True))
+
+
+def load_db(db: str = PEDL_DB) -> pd.DataFrame:
+    """Read the whole `snapshots` table from the SQLite DB into the same tidy
+    DataFrame that load() produces."""
+    conn = sqlite3.connect(db)
+    try:
+        ensure_schema(conn)
+        df = pd.read_sql_query(f"SELECT {', '.join(COLS)} FROM snapshots", conn,
+                               dtype={"short_name": str})
+    finally:
+        conn.close()
+    return _tidy(df)
+
+
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Combine gzipped availability snapshots.")
-    ap.add_argument("data_dir", nargs="?", default="data",
-                    help="directory of *.csv.gz snapshots (default: ./data)")
+    ap = argparse.ArgumentParser(description="Combine availability snapshots into a tidy table.")
+    ap.add_argument("data_dir", nargs="?", default=None,
+                    help="directory of *.csv.gz snapshots to read instead of the DB "
+                         "(default: read the SQLite DB)")
+    ap.add_argument("--db", default=PEDL_DB,
+                    help="SQLite DB to read (default: $PEDL_DB or ~/pedl.db)")
     ap.add_argument("--out", help="write combined table here (.parquet or .csv.gz)")
     args = ap.parse_args()
 
-    df = load(args.data_dir)
-    n_files = len(glob.glob(os.path.join(args.data_dir, "*.csv.gz")))
-    print(f"files:     {n_files}")
+    if args.data_dir:
+        df = load(args.data_dir)
+        print(f"files:     {len(glob.glob(os.path.join(args.data_dir, '*.csv.gz')))}")
+    else:
+        df = load_db(args.db)
+        print(f"db:        {args.db}")
     print(f"rows:      {len(df):,}")
     print(f"stations:  {df['short_name'].nunique():,}")
     print(f"snapshots: {df['ts_iso'].nunique():,}")

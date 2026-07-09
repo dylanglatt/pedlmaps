@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
-"""Snapshot live Citi Bike availability to a CSV log, for validating the typical-
-availability predictions against reality. Run it on a schedule (cron / a Cowork
-scheduled task) a few times a day for a week or two; then run check_accuracy.py.
+"""Snapshot live Citi Bike availability into a local SQLite DB, for validating the
+typical-availability predictions against reality. Run it on a schedule (cron / a
+Cowork scheduled task) a few times a day for a week or two; then run check_accuracy.py.
 
-This is a DEVELOPER tool — it is not part of the app and ships nothing.
+This is a DEVELOPER tool — it is not part of the app and ships nothing. Stdlib only
+so it runs on the droplet with no extra deps.
 
-Each run appends one row per station:
+Each run inserts one row per station (idempotent — INSERT OR IGNORE on
+UNIQUE(short_name, ts_iso), so re-running a given minute is a no-op):
   ts_iso, js_day(0=Sun..6=Sat), hour, short_name, capacity, bikes, ebikes, classic, docks
 
 Env:
-  SNAP_CSV  output path (default: scripts/snapshots.csv)
+  PEDL_DB  database path (default: ~/pedl.db)
 """
-import csv, json, os, sys, urllib.request
+import json, os, sqlite3, sys, urllib.request
 from datetime import datetime
 try:
     from zoneinfo import ZoneInfo
@@ -21,8 +23,22 @@ except Exception:
 
 INFO_URL = "https://gbfs.lyft.com/gbfs/1.1/bkn/en/station_information.json"
 STATUS_URL = "https://gbfs.lyft.com/gbfs/1.1/bkn/en/station_status.json"
-OUT = os.environ.get("SNAP_CSV", os.path.join(os.path.dirname(__file__), "snapshots.csv"))
+DB = os.path.expanduser(os.environ.get("PEDL_DB", "~/pedl.db"))
 COLS = ["ts_iso", "js_day", "hour", "short_name", "capacity", "bikes", "ebikes", "classic", "docks"]
+
+DDL = """CREATE TABLE IF NOT EXISTS snapshots (
+    ts_iso     TEXT,
+    js_day     INTEGER,
+    hour       INTEGER,
+    short_name TEXT,
+    capacity   INTEGER,
+    bikes      INTEGER,
+    ebikes     INTEGER,
+    classic    INTEGER,
+    docks      INTEGER,
+    UNIQUE(short_name, ts_iso)
+)"""
+INDEX = "CREATE INDEX IF NOT EXISTS idx_snapshots_station_ts ON snapshots(short_name, ts_iso)"
 
 
 def fetch(url):
@@ -38,24 +54,29 @@ def main():
     hour = now.hour
     ts = now.isoformat(timespec="seconds")
 
-    new = not os.path.exists(OUT)
-    rows = 0
-    with open(OUT, "a", newline="") as f:
-        w = csv.writer(f)
-        if new:
-            w.writerow(COLS)
-        for st in status:
-            meta = info.get(st["station_id"])
-            if not meta or not meta.get("short_name"):
-                continue
-            bikes = st.get("num_bikes_available", 0) or 0
-            ebikes = st.get("num_ebikes_available", 0) or 0
-            classic = max(0, bikes - ebikes)
-            docks = st.get("num_docks_available", 0) or 0
-            w.writerow([ts, js_day, hour, meta["short_name"], meta.get("capacity", 0),
-                        bikes, ebikes, classic, docks])
-            rows += 1
-    print(f"{ts}: appended {rows} stations -> {OUT}")
+    rows = []
+    for st in status:
+        meta = info.get(st["station_id"])
+        if not meta or not meta.get("short_name"):
+            continue
+        bikes = st.get("num_bikes_available", 0) or 0
+        ebikes = st.get("num_ebikes_available", 0) or 0
+        classic = max(0, bikes - ebikes)
+        docks = st.get("num_docks_available", 0) or 0
+        rows.append((ts, js_day, hour, meta["short_name"], meta.get("capacity", 0),
+                     bikes, ebikes, classic, docks))
+
+    conn = sqlite3.connect(DB)
+    conn.execute(DDL)
+    conn.execute(INDEX)
+    before = conn.total_changes
+    conn.executemany(
+        f"INSERT OR IGNORE INTO snapshots ({', '.join(COLS)}) VALUES ({', '.join('?' * len(COLS))})",
+        rows)
+    inserted = conn.total_changes - before
+    conn.commit()
+    conn.close()
+    print(f"{ts}: inserted {inserted} of {len(rows)} stations -> {DB}")
 
 
 if __name__ == "__main__":

@@ -12,12 +12,15 @@ Two kinds of metric:
       empty recall       = when the station was actually empty, how often we said
                            "usually empty" (<25). (high = we warn when we should)
 
-Usage:  python3 scripts/check_accuracy.py [snapshots.csv] [lib/availability.json]
+Usage:  python3 scripts/check_accuracy.py [PEDL_DB] [lib/availability.json]
+
+Env:  PEDL_DB  database path (default: ~/pedl.db)
 """
-import csv, json, os, sys
+import json, os, sqlite3, sys
 
 HERE = os.path.dirname(__file__)
-SNAP = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "snapshots.csv")
+DB = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser(
+    os.environ.get("PEDL_DB", "~/pedl.db"))
 PRED = sys.argv[2] if len(sys.argv) > 2 else os.path.join(HERE, "..", "lib", "availability.json")
 STOCKED, EMPTY = 45, 25  # fullness tiers (match patternCaption in lib/predictions.js)
 
@@ -29,8 +32,16 @@ def main():
     pred_stocked = pred_stocked_hit = 0   # precision of "usually has bikes"
     actual_empty = warned_empty = 0       # recall of "usually empty"
 
-    with open(SNAP) as f:
-        for row in csv.DictReader(f):
+    conn = sqlite3.connect(DB)
+    conn.row_factory = sqlite3.Row
+    if conn.execute("SELECT name FROM sqlite_master WHERE type='table' "
+                    "AND name='snapshots'").fetchone() is None:
+        print("No snapshots table. Collect snapshots first (snapshot_availability.py).")
+        return 1
+
+    try:
+        for row in conn.execute("SELECT capacity, short_name, js_day, hour, bikes "
+                                "FROM snapshots"):
             n += 1
             cap = int(row["capacity"] or 0)
             sn = row["short_name"]
@@ -52,6 +63,8 @@ def main():
                 actual_empty += 1
                 if pred_full < EMPTY:
                     warned_empty += 1
+    finally:
+        conn.close()
 
     if covered == 0:
         print("No overlapping rows. Collect snapshots first (snapshot_availability.py).")
