@@ -12,7 +12,7 @@ import { startSim, stopSim } from '../lib/navSim';
 import { directions, WALK, BIKE } from '../lib/routing';
 import { arrivalLine, continuation, shortInstruction } from '../lib/navPhrasing';
 import { collapseManeuvers } from '../lib/maneuvers';
-import { openCitiBike } from '../lib/citibike';
+import { openUnlock } from '../lib/unlock';
 import { fmtMiles } from '../lib/tripPlanner';
 import { formatClock, distanceMeters } from '../lib/geo';
 import { NAV } from '../lib/config';
@@ -55,7 +55,7 @@ function manIcon(step) {
   return 'straight';
 }
 // The "grab your bike" moment — when the current/next cue is to undock and ride.
-// That's where we offer the sanctioned handoff to the official Citi Bike app.
+// That's where we surface the sanctioned unlock hand-off (GBFS-sourced link).
 function isUnlockStep(step) {
   return /undock|start riding/i.test(step?.instruction || '');
 }
@@ -154,11 +154,15 @@ async function rebuildFrom(here, waypoints) {
   return { maneuvers: collapseManeuvers(maneuvers), coords };
 }
 
-export default function NavScreen({ trip, onEnd }) {
+export default function NavScreen({ trip, system = null, preferLyft = false, onEnd }) {
   const c = useTheme();
   const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(c), [c]);
   const { plan, route, dest } = trip;
+  // Pickup station for the unlock hand-off. Its GBFS `rentalUris` drives the deep
+  // link; falls through to the system link when absent (lib/unlock.js). Works for
+  // both single and multi-leg plans (the combined plan carries the first origin).
+  const pickup = plan?.originStation || null;
 
   // The live route geometry can change mid-trip on a reroute, so hold it in state.
   const [coords, setCoords] = useState(route.coords);
@@ -307,10 +311,10 @@ export default function NavScreen({ trip, onEnd }) {
                 <Icon name="forward" size={16} color="rgba(255,255,255,0.45)" />
               </View>
               {(isUnlockStep(cur) || isUnlockStep(next) || atRack) ? (
-                <TouchableOpacity style={styles.unlockCue} onPress={openCitiBike} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel="Open Citi Bike to unlock">
-                  <Icon name="unlock" size={17} color="#fff" />
-                  <Text style={styles.unlockCueTxt} numberOfLines={1}>Undock your bike — tap to open Citi Bike</Text>
-                  <Icon name="forward" size={14} color="rgba(255,255,255,0.6)" />
+                <TouchableOpacity style={styles.unlockPill} onPress={() => openUnlock(pickup, system, preferLyft)} activeOpacity={0.85} accessibilityRole="button" accessibilityLabel="Unlock a bike">
+                  <Icon name="unlock" size={15} color="#fff" />
+                  <Text style={styles.unlockPillTxt} numberOfLines={1}>Unlock a bike</Text>
+                  <Icon name="forward" size={13} color="rgba(255,255,255,0.55)" />
                 </TouchableOpacity>
               ) : next ? (
                 <View style={styles.bannerNext}>
@@ -414,8 +418,9 @@ function makeStyles(c) {
     bannerTxt: { color: '#fff', fontSize: 20, fontWeight: '800' },
     bannerNext: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.12)' },
     bannerNextTxt: { color: 'rgba(255,255,255,0.75)', fontSize: 14, fontWeight: '500', flex: 1 },
-    unlockCue: { flexDirection: 'row', alignItems: 'center', gap: 9, marginTop: 10, padding: 10, borderRadius: 9, backgroundColor: 'rgba(255,255,255,0.12)' },
-    unlockCueTxt: { color: '#fff', fontSize: 14, fontWeight: '600', flex: 1 },
+    // Slim, compact unlock control (replaces the old full-width dark banner).
+    unlockPill: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 6, marginTop: 8, paddingVertical: 6, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.14)' },
+    unlockPillTxt: { color: '#fff', fontSize: 13.5, fontWeight: '700' },
 
     // Expanded step list (banner tapped open)
     stepsGrip: { alignItems: 'center', paddingBottom: 8 },

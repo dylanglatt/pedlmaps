@@ -74,6 +74,11 @@ the cases, plus `node --check <file>` (or `py_compile` for scripts/). See `/plan
   — renaming wipes existing users' data. The "dockhop" prefix is intentional legacy.
 - **GBFS join gotcha:** GBFS `station_id` is a UUID that does NOT match trip-data IDs. Join via
   GBFS `short_name` (== trip-data station_id, e.g. "5872.10"). `gbfs.js` carries `shortName`.
+- **Unlock links come from GBFS, never hardcoded.** The "unlock a bike" action deep-links via each
+  station's GBFS `rental_uris.ios` (operator-provided universal link, station-specific) — this keeps
+  it city-agnostic and inside the legit-data principle. Don't hardcode per-city app URLs. The only
+  hardcoded piece is the optional per-system Lyft alternative (`lib/systems.js`), since GBFS doesn't
+  encode "open in Lyft instead". See [docs/unlock-plan.md](./docs/unlock-plan.md).
 - **Predictions are RELATIVE, not absolute.** `availability.json` encodes each station's own
   daily *shape* (busiest hour=100, emptiest=0), NOT "how many bikes at 9am". Its only valid use is
   the popular-times chart. Absolute-availability features (predicted planning / smart pickup /

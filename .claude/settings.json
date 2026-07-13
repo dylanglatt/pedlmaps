@@ -35,5 +35,18 @@
       "Read(./.env.*)",
       "Bash(rm -rf:*)"
     ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'pgrep -f \"expo start\" >/dev/null || (nohup npx expo start --ios > /tmp/expo.log 2>&1 &)'"
+          }
+        ]
+      }
+    ]
   }
 }

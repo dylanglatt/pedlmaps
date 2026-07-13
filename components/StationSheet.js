@@ -5,7 +5,7 @@ import { useTheme, radius, shadow } from '../lib/theme';
 import {
   splitPattern, docksPattern, patternCaption, isLowConfidence,
 } from '../lib/predictions';
-import { openCitiBike } from '../lib/citibike';
+import { openUnlock, resolveUnlockUrl } from '../lib/unlock';
 
 const DAY_LETTERS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const HOUR_TICKS = [6, 9, 12, 15, 18, 21]; // labeled hours
@@ -15,7 +15,7 @@ const hourLabel = (h) => (h === 0 ? '12 AM' : h === 12 ? '12 PM' : h < 12 ? `${h
 const STAR = '#E5A100'; // gold for a favorited station (distinct from the brand)
 
 // Typical-availability popup for one station (Google "popular times" style).
-export default function StationSheet({ station, initialMode = 'bike', isFav = false, onToggleFav, onClose }) {
+export default function StationSheet({ station, initialMode = 'bike', isFav = false, onToggleFav, system = null, preferLyft = false, onClose }) {
   const c = useTheme();
   const styles = useMemo(() => makeStyles(c), [c]);
 
@@ -132,12 +132,16 @@ export default function StationSheet({ station, initialMode = 'bike', isFav = fa
             </View>
           )}
 
-          {/* Sanctioned handoff: unlock / live battery live in the official app. */}
-          <TouchableOpacity style={styles.unlockRow} onPress={openCitiBike} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Unlock in the Citi Bike app">
-            <Icon name="unlock" size={16} color={c.textMute} />
-            <Text style={styles.unlockTxt}>Unlock in Citi Bike</Text>
-            <Icon name="external" size={12} color={c.textFaint} />
-          </TouchableOpacity>
+          {/* Sanctioned handoff: unlock this station's bikes via the GBFS deep link,
+              honoring the rider's operator/Lyft preference (lib/unlock.js). Hidden if
+              there's no link at all to open. */}
+          {resolveUnlockUrl(station, system, preferLyft) && (
+            <TouchableOpacity style={styles.unlockRow} onPress={() => openUnlock(station, system, preferLyft)} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel={`Unlock in ${preferLyft && system?.lyftLink ? 'Lyft' : (system?.name || 'the app')}`}>
+              <Icon name="unlock" size={16} color={c.textMute} />
+              <Text style={styles.unlockTxt}>{`Unlock in ${preferLyft && system?.lyftLink ? 'Lyft' : (system?.name || 'the app')}`}</Text>
+              <Icon name="external" size={12} color={c.textFaint} />
+            </TouchableOpacity>
+          )}
         </Pressable>
       </Pressable>
     </Modal>

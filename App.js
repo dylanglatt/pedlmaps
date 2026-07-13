@@ -20,12 +20,15 @@ import { fetchStations, nearest, countFor } from './lib/gbfs';
 import { getLocation, watchLocation, DEFAULT_CENTER } from './lib/location';
 import { loadPlaces, addPlace, removePlace, setFlipMode, makePlace, migrateLegacy } from './lib/savedPlaces';
 import { loadFavStations, saveFavStations, isFavStation } from './lib/savedStations';
-import { loadUnits, saveUnits, loadOnboarded, saveOnboarded } from './lib/storage';
+import { loadUnits, saveUnits, loadOnboarded, saveOnboarded, loadPreferLyft, savePreferLyft } from './lib/storage';
 import FirstRun from './components/FirstRun';
+import SettingsSheet from './components/SettingsSheet';
 import { formatAge, distanceMeters } from './lib/geo';
 import { useTheme, radius, shadow } from './lib/theme';
 import * as Sentry from '@sentry/react-native';
 import { SENTRY_DSN } from './lib/config';
+import { openUnlock } from './lib/unlock';
+import { systemFor, CURRENT_SYSTEM_ID } from './lib/systems';
 
 // Crash + error reporting. No-op when SENTRY_DSN is empty (web preview, or before
 // the project exists) and disabled in dev so local work never pollutes the dashboard
@@ -77,8 +80,48 @@ function PulseDot({ color, pulse }) {
   );
 }
 
+// Lightweight transient toast — fades in, holds ~2.2s, fades out, then calls
+// onDone to clear. Used to confirm an unlock-app switch without a blocking dialog.
+// Native-driver opacity+translate, so it's smooth and OTA-safe.
+function Toast({ message, onDone }) {
+  const c = useTheme();
+  const insets = useSafeAreaInsets();
+  const a = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    if (!message) return undefined;
+    let cancelled = false;
+    a.setValue(0);
+    Animated.timing(a, { toValue: 1, duration: 220, easing: Easing.out(Easing.ease), useNativeDriver: true }).start();
+    const t = setTimeout(() => {
+      Animated.timing(a, { toValue: 0, duration: 260, easing: Easing.in(Easing.ease), useNativeDriver: true })
+        .start(() => { if (!cancelled) onDone && onDone(); });
+    }, 2200);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [message, a, onDone]);
+  if (!message) return null;
+  return (
+    <Animated.View
+      pointerEvents="none"
+      style={{
+        position: 'absolute', left: 24, right: 24, bottom: insets.bottom + 96, zIndex: 2000,
+        alignItems: 'center', opacity: a,
+        transform: [{ translateY: a.interpolate({ inputRange: [0, 1], outputRange: [12, 0] }) }],
+      }}
+    >
+      <View style={{ backgroundColor: c.text, borderRadius: radius.pill, paddingVertical: 10, paddingHorizontal: 16, ...shadow(c).pop }}>
+        <Text style={{ color: c.bg, fontSize: 13.5, fontWeight: '700' }}>{message}</Text>
+      </View>
+    </Animated.View>
+  );
+}
+
 SplashScreen.preventAutoHideAsync().catch(() => {});
 const REFRESH_MS = 45000;
+
+// The GBFS system this build serves (single-feed NYC for now). Drives the unlock
+// hand-off's Lyft/app-store fallbacks and whether the "Use Lyft instead" escape
+// hatch is offered at all. See lib/systems.js + docs/unlock-plan.md.
+const UNLOCK_SYSTEM = systemFor(CURRENT_SYSTEM_ID);
 
 // Dev-only: force the first-run primer to show on every launch while you iterate
 // on its design (so you don't have to reinstall to clear the onboarded flag).
@@ -138,6 +181,9 @@ function AppInner() {
   const [recenterTick, setRecenterTick] = useState(0);
   const [userLoc, setUserLoc] = useState(null); // live device position for the map dot (null = unknown)
   const [showPrimer, setShowPrimer] = useState(false); // first-run welcome/permission primer
+  const [preferLyft, setPreferLyft] = useState(false); // unlock via Lyft vs the operator app
+  const [showSettings, setShowSettings] = useState(false);
+  const [toast, setToast] = useState(null); // transient message, e.g. after switching unlock app
   const timer = useRef(null);
   const watchStop = useRef(null);
   const migrated = useRef(false);
@@ -162,8 +208,8 @@ function AppInner() {
 
   useEffect(() => {
     (async () => {
-      const [pl, un, onboarded, fv] = await Promise.all([loadPlaces(), loadUnits(), loadOnboarded(), loadFavStations()]);
-      setPlaces(pl); setUnits(un); setFavIds(fv); await refresh();
+      const [pl, un, onboarded, fv, prefLyft] = await Promise.all([loadPlaces(), loadUnits(), loadOnboarded(), loadFavStations(), loadPreferLyft()]);
+      setPlaces(pl); setUnits(un); setFavIds(fv); setPreferLyft(prefLyft); await refresh();
       SplashScreen.hideAsync().catch(() => {}); // reveal the app once data is in
       if (onboarded && !FORCE_PRIMER) initLocation();
       else setShowPrimer(true); // defer the OS location prompt until they tap "Get started"
@@ -247,6 +293,28 @@ function AppInner() {
 
   const changeUnits = useCallback((u) => { setUnits(u); saveUnits(u); }, []);
 
+  const clearToast = useCallback(() => setToast(null), []);
+
+  // Persist whether we unlock via Lyft, and remember it. `announce` shows a one-time
+  // toast (used by the quiet in-header switch); the Settings row flips it silently.
+  const changePreferLyft = useCallback((next, announce = false) => {
+    setPreferLyft(next);
+    savePreferLyft(next);
+    if (announce) setToast(`Unlocking with ${next ? 'Lyft' : (UNLOCK_SYSTEM?.name || 'the app')} from now on`);
+  }, []);
+
+  // Primary action: hand off using the nearest station's GBFS link + saved preference.
+  const unlockNow = useCallback(() => {
+    openUnlock(stations[0] || null, UNLOCK_SYSTEM, preferLyft);
+  }, [stations, preferLyft]);
+
+  // Quiet secondary link: switch to the OTHER target, remember it, toast, and open it.
+  const unlockWithOther = useCallback(() => {
+    const next = !preferLyft;
+    changePreferLyft(next, true);
+    openUnlock(stations[0] || null, UNLOCK_SYSTEM, next);
+  }, [stations, preferLyft, changePreferLyft]);
+
   const openSearch = useCallback(() => { setSearching(true); setSheetIndex(2); }, []);
   const closeSearch = useCallback(() => { Keyboard.dismiss(); setSearching(false); setSheetIndex(1); }, []);
 
@@ -276,10 +344,15 @@ function AppInner() {
     ) : (
       <View style={styles.browseHead}>
         <View style={styles.headTop}>
-          <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Nearby')} activeOpacity={0.8} hitSlop={6} accessibilityRole="button" accessibilityLabel="Send feedback">
-            <Icon name="chat" size={11} color={c.onPrimary} />
-            <Text style={styles.betaTxt}>BETA</Text>
-          </TouchableOpacity>
+          <View style={styles.headLeft}>
+            <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Nearby')} activeOpacity={0.8} hitSlop={6} accessibilityRole="button" accessibilityLabel="Send feedback">
+              <Icon name="chat" size={11} color={c.onPrimary} />
+              <Text style={styles.betaTxt}>BETA</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.gearBtn} onPress={() => setShowSettings(true)} activeOpacity={0.7} hitSlop={8} accessibilityRole="button" accessibilityLabel="Settings">
+              <Ionicons name="settings-outline" size={18} color={c.textMute} />
+            </TouchableOpacity>
+          </View>
           <View style={styles.headRight}>
             {mode === 'bike' && (
               <View style={styles.filterToggle}>
@@ -329,6 +402,25 @@ function AppInner() {
               <Text style={[styles.segTxt, mode === o.k && styles.segTxtOn]}>{o.label}</Text>
             </TouchableOpacity>
           ))}
+        </View>
+        <View style={styles.unlockWrap}>
+          <TouchableOpacity
+            style={styles.unlockBtn}
+            onPress={unlockNow}
+            activeOpacity={0.9}
+            accessibilityRole="button"
+            accessibilityLabel={`Unlock a bike with ${preferLyft ? 'Lyft' : (UNLOCK_SYSTEM?.name || 'the app')}`}
+          >
+            <Ionicons name="lock-open" size={17} color={c.onPrimary} />
+            <Text style={styles.unlockTxt}>Unlock a bike</Text>
+          </TouchableOpacity>
+          {UNLOCK_SYSTEM?.lyftLink && (
+            <TouchableOpacity onPress={unlockWithOther} activeOpacity={0.7} hitSlop={8} accessibilityRole="button">
+              <Text style={styles.unlockAlt}>
+                {`Use ${preferLyft ? (UNLOCK_SYSTEM?.name || 'the app') : 'Lyft'} instead`}
+              </Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -419,11 +511,21 @@ function AppInner() {
         )}
       </BottomSheet>
 
-      {chartStation && <StationSheet station={chartStation} initialMode={mode} isFav={isFavStation(favIds, chartStation.id)} onToggleFav={toggleFav} onClose={() => setChartId(null)} />}
+      {chartStation && <StationSheet station={chartStation} initialMode={mode} isFav={isFavStation(favIds, chartStation.id)} onToggleFav={toggleFav} system={UNLOCK_SYSTEM} preferLyft={preferLyft} onClose={() => setChartId(null)} />}
 
-      {navTrip && <NavScreen trip={navTrip} onEnd={() => setNavTrip(null)} />}
+      {navTrip && <NavScreen trip={navTrip} system={UNLOCK_SYSTEM} preferLyft={preferLyft} onEnd={() => setNavTrip(null)} />}
 
       <Feedback visible={!!feedback} screen={feedback} onClose={() => setFeedback(null)} />
+
+      <SettingsSheet
+        visible={showSettings}
+        system={UNLOCK_SYSTEM}
+        preferLyft={preferLyft}
+        onChangePreferLyft={(next) => changePreferLyft(next)}
+        onClose={() => setShowSettings(false)}
+      />
+
+      <Toast message={toast} onDone={clearToast} />
 
       <FirstRun visible={showPrimer} onDone={finishPrimer} />
     </View>
@@ -450,6 +552,8 @@ function makeStyles(c) {
     locBannerTxt: { color: c.onPrimary, fontSize: 12, fontWeight: '600', flexShrink: 1 },
     statusRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
     headTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    headLeft: { flexDirection: 'row', alignItems: 'center' },
+    gearBtn: { padding: 2 },
     betaPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: c.primary, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 4, marginRight: 8 },
     betaTxt: { color: c.onPrimary, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
     titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
@@ -479,6 +583,12 @@ function makeStyles(c) {
     segItemOn: { backgroundColor: c.elevated, ...shadow(c).card },
     segTxt: { fontSize: 14, color: c.textMute, fontWeight: '600' },
     segTxtOn: { color: c.text },
+
+    // Primary "Unlock a bike" hand-off + the quiet switch link beneath it.
+    unlockWrap: { alignItems: 'center', gap: 8 },
+    unlockBtn: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: c.primary, borderRadius: radius.md, paddingVertical: 11, ...shadow(c).card },
+    unlockTxt: { color: c.onPrimary, fontSize: 16, fontWeight: '800' },
+    unlockAlt: { color: c.primary, fontSize: 13, fontWeight: '600' },
 
     planHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10 },
     planTitle: { fontWeight: '800', fontSize: 18, color: c.text },
