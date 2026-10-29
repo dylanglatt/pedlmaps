@@ -31,12 +31,14 @@ workflow to Claude Code.)
 
 - [~] **Crash reporting** — Sentry. Code wired (App.js init + Sentry.wrap + ErrorBoundary,
       `@sentry/react-native` dep, `metro.config.js`, `@sentry/react-native/expo` plugin in
-      app.json, `SENTRY_DSN` in config). REMAINING: (1) `npx expo install @sentry/react-native`
-      to lock the SDK-correct version; (2) create Sentry org/project, paste org slug into the
-      app.json plugin; (3) set `EXPO_PUBLIC_SENTRY_DSN` in `.env` + EAS preview env; (4) set
-      `SENTRY_AUTH_TOKEN` as an EAS secret (source-map upload); (5) native `eas build`.
-- [ ] **Feedback webhook** — set `EXPO_PUBLIC_FEEDBACK_WEBHOOK` (Discord) so the in-app BETA
-      feedback button actually sends. Set it in local `.env` AND as an EAS env var (preview env).
+      app.json, `SENTRY_DSN` in config). REMAINING: (1) ~~lock the SDK-correct version~~ done
+      (`~7.11.0` matches SDK 56's expected version); (2) ~~create Sentry org/project~~ done (app.json plugin
+      has org + project); (3) ~~set `EXPO_PUBLIC_SENTRY_DSN`~~ done (local `.env` + EAS preview
+      env, verified 2026-10-21); (4) `SENTRY_AUTH_TOKEN` exists in the EAS preview env but is
+      likely the token that 401'd (`b80c55d`) — validate/regenerate before removing
+      `SENTRY_DISABLE_AUTO_UPLOAD` from `eas.json`; (5) native `eas build`.
+- [x] **Feedback webhook** — `EXPO_PUBLIC_FEEDBACK_WEBHOOK` is set in local `.env` and the EAS
+      preview env (verified 2026-10-21). Still needs a device check that a send arrives.
 - [ ] **Snapshot collection** — start the scheduled GBFS poll
       (`scripts/snapshot_availability.py`) to build real absolute-availability data. This is what
       unblocks re-enabling smart pickup (predicted planning is dormant until then).

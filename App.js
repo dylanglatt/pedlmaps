@@ -308,13 +308,6 @@ function AppInner() {
     openUnlock(stations[0] || null, UNLOCK_SYSTEM, preferLyft);
   }, [stations, preferLyft]);
 
-  // Quiet secondary link: switch to the OTHER target, remember it, toast, and open it.
-  const unlockWithOther = useCallback(() => {
-    const next = !preferLyft;
-    changePreferLyft(next, true);
-    openUnlock(stations[0] || null, UNLOCK_SYSTEM, next);
-  }, [stations, preferLyft, changePreferLyft]);
-
   const openSearch = useCallback(() => { setSearching(true); setSheetIndex(2); }, []);
   const closeSearch = useCallback(() => { Keyboard.dismiss(); setSearching(false); setSheetIndex(1); }, []);
 
@@ -414,13 +407,6 @@ function AppInner() {
             <Ionicons name="lock-open" size={17} color={c.onPrimary} />
             <Text style={styles.unlockTxt}>Unlock a bike</Text>
           </TouchableOpacity>
-          {UNLOCK_SYSTEM?.lyftLink && (
-            <TouchableOpacity onPress={unlockWithOther} activeOpacity={0.7} hitSlop={8} accessibilityRole="button">
-              <Text style={styles.unlockAlt}>
-                {`Use ${preferLyft ? (UNLOCK_SYSTEM?.name || 'the app') : 'Lyft'} instead`}
-              </Text>
-            </TouchableOpacity>
-          )}
         </View>
       </View>
     );
@@ -588,7 +574,6 @@ function makeStyles(c) {
     unlockWrap: { alignItems: 'center', gap: 8 },
     unlockBtn: { alignSelf: 'stretch', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: c.primary, borderRadius: radius.md, paddingVertical: 11, ...shadow(c).card },
     unlockTxt: { color: c.onPrimary, fontSize: 16, fontWeight: '800' },
-    unlockAlt: { color: c.primary, fontSize: 13, fontWeight: '600' },
 
     planHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingBottom: 10 },
     planTitle: { fontWeight: '800', fontSize: 18, color: c.text },

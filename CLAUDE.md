@@ -31,7 +31,10 @@ the cases, plus `node --check <file>` (or `py_compile` for scripts/). See `/plan
   just push to `main`. CI (`.github/workflows/eas-update.yml`) publishes an EAS Update to the
   **`preview`** channel automatically. The TestFlight/dev build picks it up on next launch.
 - **Native changes** (new native dep, app icon/name, permissions, new Apple target) need a real
-  build: `eas build --profile preview --platform ios`. This is a **managed / CNG** project — `ios/`
+  build. **TestFlight builds use the `production` profile** (store distribution):
+  `eas build --profile production --platform ios`, then `eas submit --platform ios --latest`.
+  The `preview` profile is `distribution: internal` (ad hoc, registered devices only) and can't
+  go to TestFlight. TestFlight builds expire after 90 days. This is a **managed / CNG** project — `ios/`
   is gitignored and regenerated from `app.json` + config plugins on every build (EAS prebuilds in
   CI), so all native config lives declaratively in `app.json` (`ios.infoPlist`, `expo-location`
   plugin, android permissions). The pedl name + icon already ship via EAS (TestFlight), so there is
@@ -40,6 +43,8 @@ the cases, plus `node --check <file>` (or `py_compile` for scripts/). See `/plan
   `ios/`.
 - `eas.json`: the **production** profile deliberately uses `channel: preview` + `environment:
   preview` so the store build keeps receiving the same OTA pushes and EAS-hosted env vars.
+  All app env vars live in the EAS **preview** environment; the EAS `production` environment is
+  nearly empty, so don't point a profile at it without copying the vars over first.
 
 ## Architecture
 
