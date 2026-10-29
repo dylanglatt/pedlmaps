@@ -49,7 +49,9 @@ async function buildRoute(origin, oStation, dStation, dest, opts = {}) {
     // Leg-boundary cues are WAYPOINTS (kind set) — voiceNav gives them robust
     // geofence arrival detection, not the brittle turn-proximity path.
     if (i === 1) maneuvers.push({ instruction: 'Undock your bike and start riding.', location: leg.maneuvers[0]?.location || coords[coords.length - 1], distance: 0, kind: 'pickup' });
-    if (i === 2) maneuvers.push({ instruction: 'Dock your bike, then walk to your destination.', location: leg.maneuvers[0]?.location || coords[coords.length - 1], distance: 0, kind: 'dock' });
+    // The dock carries its station so mid-ride dock reroute (lib/dockWatch.js) can
+    // watch its live open-dock count. `seg` = which plan segment it belongs to.
+    if (i === 2) maneuvers.push({ instruction: 'Dock your bike, then walk to your destination.', location: leg.maneuvers[0]?.location || coords[coords.length - 1], distance: 0, kind: 'dock', station: { id: dStation.id, name: dStation.name, lat: dStation.lat, lon: dStation.lon }, seg: opts.seg || 0 });
     maneuvers.push(...leg.maneuvers);
     coords.push(...leg.coords);
   });
@@ -72,7 +74,7 @@ async function buildMultiRoute(points, segments) {
   const coords = [];
   for (let i = 0; i < segments.length; i++) {
     const seg = segments[i];
-    const r = await buildRoute(points[i], seg.originStation, seg.destStation, points[i + 1], { finalDest: i === segments.length - 1 });
+    const r = await buildRoute(points[i], seg.originStation, seg.destStation, points[i + 1], { finalDest: i === segments.length - 1, seg: i });
     if (i > 0) {
       maneuvers.push({ instruction: `Stop at ${points[i].name || 'your stop'}. Tap when ready to continue.`, location: r.coords[0] || coords[coords.length - 1], distance: 0, kind: 'stop' });
     }

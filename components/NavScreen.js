@@ -181,7 +181,12 @@ export default function NavScreen({ trip, system = null, preferLyft = false, onE
   // ridden away — instead of vanishing the moment the pickup geofence trips.
   const [atRack, setAtRack] = useState(false);
   const pickupLocRef = useRef(null); // [lat,lon] of the pickup we're currently at
-  const arrival = useRef(new Date(Date.now() + plan.totalSec * 1000)).current;
+  // Dock station per plan segment. `plan` is a prop, so a mid-ride dock switch
+  // (lib/dockWatch.js) swaps the active dock here — markers + step list follow.
+  const [docks, setDocks] = useState(() => (plan.segments ? plan.segments.map((s) => s.destStation) : [plan.destStation]));
+  // ETA can grow on a dock switch, so it lives in a ref (read by the ticker) + state.
+  const arrivalRef = useRef(new Date(Date.now() + plan.totalSec * 1000));
+  const [arrival, setArrival] = useState(arrivalRef.current);
   const [minLeft, setMinLeft] = useState(Math.max(1, Math.round(plan.totalSec / 60)));
   const tick = useRef(null);
 
@@ -216,6 +221,22 @@ export default function NavScreen({ trip, system = null, preferLyft = false, onE
           nav.replaceRoute(r.maneuvers, r.coords); // resumes guidance on the new path
         } catch { nav.cancelReroute(); }
       },
+      // Destination dock filled up mid-ride: same rebuild as onReroute, but the dock
+      // waypoint now points at the new station. Announced by nav once it's in place.
+      onDockSwitch: async (h, wps, sw) => {
+        try {
+          const r = await rebuildFrom(h, wps);
+          if (!r.maneuvers.length || !r.coords.length) { nav.cancelReroute(); return; }
+          setCoords(r.coords);
+          setManeuvers(r.maneuvers);
+          const seg = wps.find((w) => w.kind === 'dock')?.seg || 0;
+          setDocks((ds) => ds.map((d, i) => (i === seg ? { ...d, ...sw.to } : d)));
+          arrivalRef.current = new Date(arrivalRef.current.getTime() + (sw.extraSec || 0) * 1000);
+          setArrival(arrivalRef.current);
+          setMinLeft(Math.max(0, Math.round((arrivalRef.current.getTime() - Date.now()) / 60000)));
+          nav.applyDockSwitch(r.maneuvers, r.coords, sw);
+        } catch { nav.cancelReroute(); }
+      },
       onArrive: () => {
         setCur({ instruction: arrivalLine(dest && !dest.current ? (dest.name || dest.label) : null) }); setNext(null); setDist(null);
         // Let the spoken "You have arrived" land, then close the route itself.
@@ -223,7 +244,7 @@ export default function NavScreen({ trip, system = null, preferLyft = false, onE
       },
     });
     tick.current = setInterval(() => {
-      setMinLeft(Math.max(0, Math.round((arrival.getTime() - Date.now()) / 60000)));
+      setMinLeft(Math.max(0, Math.round((arrivalRef.current.getTime() - Date.now()) / 60000)));
     }, 15000);
     return () => { clearInterval(tick.current); stopSim(); nav.stop(); };
   }, []);
@@ -248,16 +269,17 @@ export default function NavScreen({ trip, system = null, preferLyft = false, onE
   // operational "how"), plus the numbered place stops and the destination pin.
   const markers = [];
   if (plan.segments) {
-    plan.segments.forEach((seg) => {
+    plan.segments.forEach((seg, i) => {
+      const dk = docks[i] || seg.destStation;
       markers.push({ lat: seg.originStation.lat, lon: seg.originStation.lon, title: 'Pick up', color: c.good, kind: 'pickup' });
-      markers.push({ lat: seg.destStation.lat, lon: seg.destStation.lon, title: 'Dock', color: c.dock, kind: 'dock' });
+      markers.push({ lat: dk.lat, lon: dk.lon, title: 'Dock', color: c.dock, kind: 'dock' });
     });
     (plan.points || []).slice(1, -1).forEach((pt, i) => markers.push({ lat: pt.lat, lon: pt.lon, title: pt.name || 'Stop', color: c.primary, kind: 'stop', num: i + 1 }));
     if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.danger, kind: 'dest' });
   } else {
     markers.push(
       { lat: plan.originStation.lat, lon: plan.originStation.lon, title: 'Pick up', color: c.good, kind: 'pickup' },
-      { lat: plan.destStation.lat, lon: plan.destStation.lon, title: 'Dock', color: c.dock, kind: 'dock' },
+      { lat: docks[0].lat, lon: docks[0].lon, title: 'Dock', color: c.dock, kind: 'dock' },
     );
     if (dest) markers.push({ lat: dest.lat, lon: dest.lon, title: 'Destination', color: c.danger, kind: 'dest' });
   }
@@ -266,9 +288,9 @@ export default function NavScreen({ trip, system = null, preferLyft = false, onE
     const segs = plan.segments || [{ originStation: plan.originStation, destStation: plan.destStation }];
     return {
       pickups: segs.map((s) => s.originStation && s.originStation.name),
-      docks: segs.map((s) => s.destStation && s.destStation.name),
+      docks: segs.map((s, i) => (docks[i] || s.destStation)?.name),
     };
-  }, [plan]);
+  }, [plan, docks]);
   const steps = useMemo(() => buildSteps(maneuvers, dest, stationNames), [maneuvers, dest, stationNames]);
 
   return (
