@@ -27,24 +27,31 @@ the cases, plus `node --check <file>` (or `py_compile` for scripts/). See `/plan
 
 ### Shipping (OTA vs native build) — important
 
+- **Two update channels.** `preview` = TestFlight testers (and dev/internal builds). `production` =
+  App Store users. Never the same binary: App Store builds come from the `production` profile,
+  TestFlight testing builds from the `testflight` profile (same store distribution, but listens on
+  `preview`). `runtimeVersion` uses the `appVersion` policy, so bumping `expo.version` in app.json
+  starts a new runtime and needs a new native build for both channels.
 - **OTA-safe changes** (JS/TS only — no new native modules, permissions, icon, or name):
-  just push to `main`. CI (`.github/workflows/eas-update.yml`) publishes an EAS Update to the
-  **`preview`** channel automatically. The TestFlight/dev build picks it up on next launch.
+  push to `main`. CI (`.github/workflows/eas-update.yml`) bundles the app as a check, then
+  publishes an EAS Update to the **`preview`** branch only. Test it on the TestFlight build.
+  To ship it to App Store users, run the **EAS Promote to Production** workflow
+  (`.github/workflows/eas-promote.yml`, Actions tab) which republishes the latest preview update
+  (or a given group ID, also how you roll back) to the `production` branch.
 - **Native changes** (new native dep, app icon/name, permissions, new Apple target) need a real
-  build. **TestFlight builds use the `production` profile** (store distribution):
-  `eas build --profile production --platform ios`, then `eas submit --platform ios --latest`.
+  build: `eas build --profile production --platform ios` + `eas submit --platform ios --latest`
+  for the App Store, and `eas build --profile testflight --platform ios` +
+  `eas submit --profile testflight --platform ios --latest` for a TestFlight testing build.
   The `preview` profile is `distribution: internal` (ad hoc, registered devices only) and can't
   go to TestFlight. TestFlight builds expire after 90 days. This is a **managed / CNG** project — `ios/`
   is gitignored and regenerated from `app.json` + config plugins on every build (EAS prebuilds in
   CI), so all native config lives declaratively in `app.json` (`ios.infoPlist`, `expo-location`
-  plugin, android permissions). The pedl name + icon already ship via EAS (TestFlight), so there is
-  NO pending "rebrand prebuild" and no committed Xcode project to worry about — adding native
-  features (e.g. a WidgetKit target) means adding a config plugin + entitlement, not hand-editing
-  `ios/`.
-- `eas.json`: the **production** profile deliberately uses `channel: preview` + `environment:
-  preview` so the store build keeps receiving the same OTA pushes and EAS-hosted env vars.
-  All app env vars live in the EAS **preview** environment; the EAS `production` environment is
-  nearly empty, so don't point a profile at it without copying the vars over first.
+  plugin, android permissions). Adding native features (e.g. a WidgetKit target) means adding a
+  config plugin + entitlement, not hand-editing `ios/`.
+- **EAS environments.** `production` profile uses EAS env `production`; `testflight`/`preview` use
+  `preview`. Both must hold the same `EXPO_PUBLIC_*` vars (see `.env.example`) plus
+  `SENTRY_AUTH_TOKEN`. OTA bundles are built with the `preview` env and promoted as-is.
+- iPad is off for v1 (`supportsTablet: false`).
 
 ## Architecture
 
@@ -98,7 +105,8 @@ the cases, plus `node --check <file>` (or `py_compile` for scripts/). See `/plan
 
 ## Current state
 
-Working tree typically on `main`. Active work: a **voice-nav arrival fix** (NavScreen.js,
-TripScreen.js, lib/voiceNav.js, lib/config.js modified). Outstanding work is tracked in
-[TODO.md](./TODO.md). Beta basics (Sentry crash reporting, feedback webhook, snapshot collection)
-are still unbuilt.
+Launch-fix pass (Nov 2026, branch `launch-fixes`): nav failure paths, Always-location explainer,
+TTS fallback, planner/network hardening, Sentry scrubbing, BETA removal, About/disclaimer,
+production channel split. See [docs/launch-fix-prompts.md](./docs/launch-fix-prompts.md) and
+[docs/privacy-policy-update.md](./docs/privacy-policy-update.md). Outstanding work is tracked in
+[TODO.md](./TODO.md).

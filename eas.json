@@ -17,16 +17,22 @@
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     },
+    "testflight": {
+      "extends": "production",
+      "channel": "preview",
+      "environment": "preview"
+    },
     "production": {
       "autoIncrement": true,
-      "channel": "preview",
-      "environment": "preview",
+      "channel": "production",
+      "environment": "production",
       "env": {
         "SENTRY_DISABLE_AUTO_UPLOAD": "true"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {},
+    "testflight": {}
   }
 }

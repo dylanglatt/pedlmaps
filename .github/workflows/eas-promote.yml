@@ -1,0 +1,52 @@
+name: EAS Promote to Production
+
+# Manually promote a tested OTA update from the preview branch (TestFlight) to the
+# production branch (App Store users). Run from the Actions tab after you've checked
+# the update on your TestFlight build. Leave "group" empty to promote the latest
+# preview update; or paste an update group ID to promote (or roll back to) a specific one.
+on:
+  workflow_dispatch:
+    inputs:
+      group:
+        description: 'Update group ID to promote (blank = latest on preview)'
+        required: false
+        default: ''
+      message:
+        description: 'Release note for this promotion'
+        required: false
+        default: 'Promote preview to production'
+
+concurrency:
+  group: eas-promote
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup EAS
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: 27.1.0
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Republish to production
+        env:
+          # Inputs go through env, never interpolated into the shell.
+          GROUP: ${{ github.event.inputs.group }}
+          MESSAGE: ${{ github.event.inputs.message }}
+        run: |
+          MSG="$(printf '%s' "$MESSAGE" | head -n 1 | cut -c1-200)"
+          if [ -n "$GROUP" ]; then
+            eas update:republish --group "$GROUP" --destination-branch production --message "$MSG" --non-interactive
+          else
+            eas update:republish --branch preview --destination-branch production --message "$MSG" --non-interactive
+          fi

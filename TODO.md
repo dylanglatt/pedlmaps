@@ -3,7 +3,21 @@
 Outstanding work, roughly in priority order. (Captured 2026-06-23 when moving the build
 workflow to Claude Code.)
 
-## Finish the nav fix (in progress)
+## App Store launch (Nov 2026)
+
+Code fixes are on branch `launch-fixes`. Remaining, in order:
+
+- [ ] Google Cloud: create a TTS-only key (EXPO_PUBLIC_GOOGLE_TTS_KEY), ship, device-verify, THEN
+      restrict the Maps key to iOS app `com.dylanglatt.citibike` + the 4 Maps APIs, set quotas
+      and a billing alert (docs/claude-code-launch-prompts.md Phase 0.3 to 0.6).
+- [ ] Rotate the Discord webhook and ORS key; update `.env` and both EAS environments.
+- [ ] Copy all EXPO_PUBLIC_* vars + SENTRY_AUTH_TOKEN into the EAS `production` environment.
+- [ ] Update pedlmaps.com/privacy.html from docs/privacy-policy-update.md.
+- [ ] Merge `launch-fixes` to main (publishes to preview / current TestFlight build).
+- [ ] Build: `testflight` profile (testing) and `production` profile (store). Device pass.
+- [ ] App Store Connect: screenshots (6.9"), listing copy, privacy answers, review notes, submit.
+
+
 
 - [ ] **Real-movement device test.** The teleport smoke test proved the `radius` path. The
       `parked` (stop-short) and `passed` (rolled-past) paths only appear with actual motion.
@@ -24,8 +38,8 @@ workflow to Claude Code.)
 
 ## Nav loose end
 
-- [ ] **Stop dwell.** The multi-stop cue says "tap when ready to continue" but nothing gates on
-      the tap yet. Only matters once intermediate stops are in use.
+- [x] **Stop dwell.** Cue wording now matches behavior (auto-continue). A real pause/Continue
+      control is still a nice-to-have.
 
 ## Beta basics (from roadmap, unrelated to nav)
 

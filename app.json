@@ -3,16 +3,18 @@
     "name": "Pedl",
     "slug": "citibike",
     "owner": "dylanglatts-team",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "runtimeVersion": "3",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "updates": {
       "url": "https://u.expo.dev/8f994d05-f1d5-4f79-b314-7dcb32006f7f"
     },
     "ios": {
-      "supportsTablet": true,
+      "supportsTablet": false,
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Shows nearby stations and guides you while riding.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Keeps voice navigation running with the screen off.",
