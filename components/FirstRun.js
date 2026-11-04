@@ -33,7 +33,6 @@ export default function FirstRun({ visible, onDone }) {
             <Logo size={56} />
             <View style={styles.titleRow}>
               <Text style={styles.title}>Welcome to Pedl</Text>
-              <View style={styles.betaTag}><Text style={styles.betaTxt}>BETA</Text></View>
             </View>
             <Text style={styles.tagline}>Smarter city bike share</Text>
           </View>
@@ -103,8 +102,6 @@ function makeStyles(c) {
     header: { alignItems: 'center', gap: 8, marginBottom: 10 },
     titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 },
     title: { fontSize: 26, fontWeight: '800', color: c.text },
-    betaTag: { backgroundColor: c.primary, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 3 },
-    betaTxt: { color: c.onPrimary, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
     tagline: { fontSize: 15, color: c.textMute, fontWeight: '500', textAlign: 'center' },
 
     row: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: c.surface, borderRadius: radius.lg, padding: 14 },

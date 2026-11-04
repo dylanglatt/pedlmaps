@@ -27,6 +27,7 @@ import { formatAge, distanceMeters } from './lib/geo';
 import { useTheme, radius, shadow } from './lib/theme';
 import * as Sentry from '@sentry/react-native';
 import { SENTRY_DSN } from './lib/config';
+import { scrubBreadcrumb, scrubEvent } from './lib/sentryScrub';
 import { openUnlock } from './lib/unlock';
 import { systemFor, CURRENT_SYSTEM_ID } from './lib/systems';
 
@@ -38,7 +39,13 @@ if (SENTRY_DSN) {
   Sentry.init({
     dsn: SENTRY_DSN,
     enabled: !__DEV__,
-    tracesSampleRate: 0.2, // light performance sampling for a beta; raise later if useful
+    sendDefaultPii: false,
+    // No performance tracing: spans carry request URLs (coordinates, addresses).
+    tracesSampleRate: 0,
+    // Strip query strings (lat/lng, typed addresses, API key) and the webhook URL.
+    beforeBreadcrumb: (b) => scrubBreadcrumb(b),
+    beforeSend: (e) => scrubEvent(e),
+    beforeSendTransaction: (e) => scrubEvent(e),
   });
 }
 
@@ -327,7 +334,7 @@ function AppInner() {
           <Text style={styles.planTitle}>Plan a trip</Text>
           <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Plan a trip')} activeOpacity={0.8} hitSlop={6} accessibilityRole="button" accessibilityLabel="Send feedback">
             <Icon name="chat" size={11} color={c.onPrimary} />
-            <Text style={styles.betaTxt}>BETA</Text>
+            <Text style={styles.betaTxt}>Feedback</Text>
           </TouchableOpacity>
         </View>
         <TouchableOpacity onPress={closeSearch} hitSlop={10}>
@@ -340,7 +347,7 @@ function AppInner() {
           <View style={styles.headLeft}>
             <TouchableOpacity style={styles.betaPill} onPress={() => setFeedback('Nearby')} activeOpacity={0.8} hitSlop={6} accessibilityRole="button" accessibilityLabel="Send feedback">
               <Icon name="chat" size={11} color={c.onPrimary} />
-              <Text style={styles.betaTxt}>BETA</Text>
+              <Text style={styles.betaTxt}>Feedback</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.gearBtn} onPress={() => setShowSettings(true)} activeOpacity={0.7} hitSlop={8} accessibilityRole="button" accessibilityLabel="Settings">
               <Ionicons name="settings-outline" size={18} color={c.textMute} />
@@ -541,7 +548,7 @@ function makeStyles(c) {
     headLeft: { flexDirection: 'row', alignItems: 'center' },
     gearBtn: { padding: 2 },
     betaPill: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: c.primary, borderRadius: radius.pill, paddingHorizontal: 8, paddingVertical: 4, marginRight: 8 },
-    betaTxt: { color: c.onPrimary, fontSize: 10, fontWeight: '800', letterSpacing: 0.5 },
+    betaTxt: { color: c.onPrimary, fontSize: 11, fontWeight: '700' },
     titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     statusLine: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: 2, flexShrink: 1 },
     statusTxt: { fontSize: 12, color: c.textMute, fontWeight: '500' },

@@ -1,8 +1,12 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, Modal, StyleSheet } from 'react-native';
+import { View, Text, TouchableOpacity, Modal, StyleSheet, Linking } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from './Icon';
 import { useTheme, radius, shadow } from '../lib/theme';
+import { PRIVACY_URL } from '../lib/config';
+import app from '../app.json';
+
+const VERSION = app?.expo?.version || '';
 
 // Minimal settings sheet — the permanent home for rider preferences that don't
 // belong in the busy Nearby header. Today it's just the unlock choice; add future
@@ -61,6 +65,19 @@ export default function SettingsSheet({ visible, system, preferLyft, onChangePre
           ) : (
             <Text style={styles.rowHint}>{`Opens ${operatorName} to unlock a bike.`}</Text>
           )}
+
+          <View style={styles.divider} />
+          <Text style={styles.rowLabel}>About</Text>
+          {!!PRIVACY_URL && (
+            <TouchableOpacity onPress={() => Linking.openURL(PRIVACY_URL).catch(() => {})} activeOpacity={0.7} accessibilityRole="link" style={styles.linkRow}>
+              <Text style={styles.link}>Privacy Policy</Text>
+              <Icon name="forward" size={14} color={c.textMute} />
+            </TouchableOpacity>
+          )}
+          <Text style={styles.rowHint}>
+            Pedl is an independent app. It is not affiliated with or endorsed by Lyft, Citi Bike, Citibank, or any bike share operator. Station data comes from the operator's public GBFS feed.
+          </Text>
+          {!!VERSION && <Text style={styles.version}>{`Pedl v${VERSION}`}</Text>}
         </View>
       </View>
     </Modal>
@@ -82,5 +99,9 @@ function makeStyles(c) {
     segItemOn: { backgroundColor: c.elevated, ...shadow(c).card },
     segTxt: { fontSize: 14, color: c.textMute, fontWeight: '600' },
     segTxtOn: { color: c.text },
+    divider: { height: StyleSheet.hairlineWidth, backgroundColor: c.border, marginVertical: 16 },
+    linkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, marginBottom: 6 },
+    link: { fontSize: 15, color: c.primary, fontWeight: '600' },
+    version: { fontSize: 12, color: c.textFaint || c.textMute, marginTop: 2 },
   });
 }

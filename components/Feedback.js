@@ -14,7 +14,8 @@ import { FEEDBACK_WEBHOOK, PRIVACY_URL, DEBUG_TEST_CRASH } from '../lib/config';
 import app from '../app.json';
 
 const VERSION = app?.expo?.version || '?';
-const RUNTIME = String(app?.expo?.runtimeVersion ?? '?');
+// Runtime comes from the running binary (app.json may hold a policy object, not a string).
+const RUNTIME = String(Updates.runtimeVersion || '?');
 const NAME_KEY = 'citibike.feedback.name';
 const EMAIL_KEY = 'citibike.feedback.email';
 
@@ -32,7 +33,7 @@ function diagnostics(screen) {
   return `v${VERSION} · rt${RUNTIME} · update ${update} · ${Platform.OS} ${Platform.Version} · screen: ${screen || '—'}`;
 }
 
-// Beta feedback sheet. Posts a color-coded embed (by category) to a Discord
+// Feedback sheet. Posts a color-coded embed (by category) to a Discord
 // webhook — no email backend. Name/email are optional and remembered locally.
 export default function Feedback({ visible, screen, onClose }) {
   const c = useTheme();
