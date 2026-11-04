@@ -20,13 +20,13 @@ import { fetchStations, nearest, countFor } from './lib/gbfs';
 import { getLocation, watchLocation, DEFAULT_CENTER } from './lib/location';
 import { loadPlaces, addPlace, removePlace, setFlipMode, makePlace, migrateLegacy } from './lib/savedPlaces';
 import { loadFavStations, saveFavStations, isFavStation } from './lib/savedStations';
-import { loadUnits, saveUnits, loadOnboarded, saveOnboarded, loadPreferLyft, savePreferLyft } from './lib/storage';
+import { loadUnits, saveUnits, loadOnboarded, saveOnboarded, loadPreferLyft, savePreferLyft, loadStationsCache, saveStationsCache } from './lib/storage';
 import FirstRun from './components/FirstRun';
 import SettingsSheet from './components/SettingsSheet';
 import { formatAge, distanceMeters } from './lib/geo';
 import { useTheme, radius, shadow } from './lib/theme';
 import * as Sentry from '@sentry/react-native';
-import { SENTRY_DSN } from './lib/config';
+import { SENTRY_DSN, NETWORK, NEARBY } from './lib/config';
 import { scrubBreadcrumb, scrubEvent } from './lib/sentryScrub';
 import { openUnlock } from './lib/unlock';
 import { systemFor, CURRENT_SYSTEM_ID } from './lib/systems';
@@ -195,11 +195,23 @@ function AppInner() {
   const watchStop = useRef(null);
   const migrated = useRef(false);
 
+  const lastCacheSave = useRef(0);
+  const haveData = useRef(false);
   const refresh = useCallback(async () => {
     try {
       const s = await fetchStations();
-      setAll(s); setUpdatedAt(Date.now()); setError(null);
-    } catch (e) { setError(e.message || 'Failed to load'); }
+      const now = Date.now();
+      setAll(s); setUpdatedAt(now); setError(null); haveData.current = s.length > 0;
+      if (now - lastCacheSave.current > NETWORK.stationCacheEveryMs) { lastCacheSave.current = now; saveStationsCache(s, now); }
+    } catch (e) {
+      setError(e.message || 'Failed to load');
+      // Cold start offline: fall back to the last good feed, labeled by its age
+      // (the header shows "Offline" + "Updated X ago").
+      if (!haveData.current) {
+        const cached = await loadStationsCache();
+        if (cached && !haveData.current) { setAll(cached.stations); setUpdatedAt(cached.at); haveData.current = true; }
+      }
+    }
     finally { setLoading(false); }
   }, []);
 
@@ -216,8 +228,11 @@ function AppInner() {
   useEffect(() => {
     (async () => {
       const [pl, un, onboarded, fv, prefLyft] = await Promise.all([loadPlaces(), loadUnits(), loadOnboarded(), loadFavStations(), loadPreferLyft()]);
-      setPlaces(pl); setUnits(un); setFavIds(fv); setPreferLyft(prefLyft); await refresh();
-      SplashScreen.hideAsync().catch(() => {}); // reveal the app once data is in
+      setPlaces(pl); setUnits(un); setFavIds(fv); setPreferLyft(prefLyft);
+      // Reveal the app once data is in, but never wait longer than splashMaxWaitMs:
+      // a dead connection must not leave the rider staring at the splash.
+      await Promise.race([refresh(), new Promise((r) => setTimeout(r, NETWORK.splashMaxWaitMs))]);
+      SplashScreen.hideAsync().catch(() => {});
       if (onboarded && !FORCE_PRIMER) initLocation();
       else setShowPrimer(true); // defer the OS location prompt until they tap "Get started"
     })();
@@ -312,7 +327,10 @@ function AppInner() {
 
   // Primary action: hand off using the nearest station's GBFS link + saved preference.
   const unlockNow = useCallback(() => {
-    openUnlock(stations[0] || null, UNLOCK_SYSTEM, preferLyft);
+    // Outside the service area there's no "nearest" station worth deep-linking to;
+    // null falls back to opening the operator app itself (lib/unlock.js).
+    const near = stations[0] && stations[0].distance <= NEARBY.maxM ? stations[0] : null;
+    openUnlock(near, UNLOCK_SYSTEM, preferLyft);
   }, [stations, preferLyft]);
 
   const openSearch = useCallback(() => { setSearching(true); setSheetIndex(2); }, []);
@@ -461,9 +479,27 @@ function AppInner() {
         {searching ? (
           <TripScreen stations={all} onStartNav={setNavTrip} />
         ) : !loading && stations.length === 0 ? (
+          error ? (
+            <View style={styles.center}>
+              <Text style={styles.emptyTitle}>Can't reach Citi Bike right now</Text>
+              <Text style={styles.centerTxt}>Check your connection and try again.</Text>
+              <TouchableOpacity style={styles.retryBtn} onPress={() => { setLoading(true); refresh(); }} activeOpacity={0.85} accessibilityRole="button">
+                <Text style={styles.retryTxt}>Try again</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.center}>
+              <Text style={styles.emptyTitle}>No stations nearby</Text>
+              <Text style={styles.centerTxt}>Try again in a moment.</Text>
+            </View>
+          )
+        ) : !loading && stations[0] && stations[0].distance > NEARBY.maxM ? (
           <View style={styles.center}>
-            <Text style={styles.emptyTitle}>No stations nearby</Text>
-            <Text style={styles.centerTxt}>Try again in a moment.</Text>
+            <Text style={styles.emptyTitle}>You're outside the Citi Bike service area</Text>
+            <Text style={styles.centerTxt}>Pedl works with the Citi Bike network in New York. You can still browse stations there.</Text>
+            <TouchableOpacity style={styles.retryBtn} onPress={() => { setCenter(DEFAULT_CENTER); setRecenterTick((t) => t + 1); }} activeOpacity={0.85} accessibilityRole="button">
+              <Text style={styles.retryTxt}>Show New York</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <StationList
@@ -588,6 +624,8 @@ function makeStyles(c) {
 
     center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, gap: 8 },
     centerTxt: { fontSize: 13, color: c.textMute, textAlign: 'center', fontWeight: '400' },
-    emptyTitle: { fontSize: 16, fontWeight: '600', color: c.text },
+    emptyTitle: { fontSize: 16, fontWeight: '600', color: c.text, textAlign: 'center' },
+    retryBtn: { marginTop: 8, backgroundColor: c.primary, borderRadius: radius.pill, paddingHorizontal: 18, paddingVertical: 10 },
+    retryTxt: { color: c.onPrimary, fontSize: 14, fontWeight: '700' },
   });
 }

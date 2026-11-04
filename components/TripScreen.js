@@ -109,12 +109,19 @@ export default function TripScreen({ stations, onStartNav }) {
   const [error, setError] = useState(null);
   const [membership, setMembership] = useState('nonmember'); // 'member' | 'nonmember' (persisted)
   const timer = useRef(null);
+  const planSeq = useRef(0);   // latest planning request; older responses are dropped
+  const sugSeq = useRef(0);    // latest autocomplete request
+  const alive = useRef(true);
 
   useEffect(() => {
+    alive.current = true;
     loadRecents().then(setRecents);
     loadPlaces().then(setPlaces);
     loadMembership().then(setMembership);
-    getLocation().then((loc) => setOrigin({ ...CURRENT(), lat: loc.lat, lon: loc.lon })).catch(() => {});
+    // Only prefill "My Location" with a REAL fix. If location is off we'd otherwise
+    // route from the Midtown fallback while calling it the rider's position.
+    getLocation().then((loc) => { if (alive.current && !loc.fallback) setOrigin({ ...CURRENT(), lat: loc.lat, lon: loc.lon }); }).catch(() => {});
+    return () => { alive.current = false; if (timer.current) clearTimeout(timer.current); };
   }, []);
 
   const toggleMembership = useCallback(() => {
@@ -124,36 +131,50 @@ export default function TripScreen({ stations, onStartNav }) {
   const onType = useCallback((t) => {
     setQuery(t);
     if (timer.current) clearTimeout(timer.current);
+    const seq = ++sugSeq.current;
     if (t.trim().length < 3) { setSugs([]); return; }
     timer.current = setTimeout(async () => {
-      try { setSugs(await autocomplete(t)); } catch { setSugs([]); }
+      let res = [];
+      try { res = await autocomplete(t); } catch {}
+      if (alive.current && seq === sugSeq.current) setSugs(res); // ignore stale responses
     }, 300);
   }, []);
 
   const current = plan;
 
+  // Each run gets a sequence number; only the latest one may commit. Plan and route
+  // are committed together, so a slow older request can never pair its route with
+  // a newer plan (e.g. toggling Any/Classic/E-bike quickly on a slow connection).
   const runPlan = useCallback(async (org, midsArr, d, pref) => {
+    const seq = ++planSeq.current;
+    const current = () => alive.current && seq === planSeq.current;
     setBusy(true); setError(null); setPlan(null); setPoints(null); setRoute(null);
     const clean = (midsArr || []).filter(Boolean);
     try {
       if (clean.length === 0) {
         const { best } = await planTrip({ origin: org, dest: d, stations, prefer: pref });
-        setPlan({ ...best, kind: 'single' });
-        try { setRoute(await buildRoute(org, best.originStation, best.destStation, d, { finalDest: true })); }
-        catch { setRoute(null); }
+        let r = null;
+        try { r = await buildRoute(org, best.originStation, best.destStation, d, { finalDest: true }); } catch {}
+        if (!current()) return;
+        setPlan({ ...best, kind: 'single' }); setRoute(r);
       } else {
         const pts = [org, ...clean, d];
         const mt = await planMultiTrip({ points: pts, stations, prefer: pref });
-        setPlan({ ...mt, kind: 'multi' }); setPoints(pts);
-        try { setRoute(await buildMultiRoute(pts, mt.segments)); }
-        catch { setRoute(null); }
+        let r = null;
+        try { r = await buildMultiRoute(pts, mt.segments); } catch {}
+        if (!current()) return;
+        setPlan({ ...mt, kind: 'multi' }); setPoints(pts); setRoute(r);
       }
-    } catch (e) { setError(e.message || 'Planning failed'); }
-    finally { setBusy(false); }
+    } catch (e) { if (current()) setError(e.message || 'Planning failed'); }
+    finally { if (current()) setBusy(false); }
   }, [stations]);
 
   const resolvePlace = async (place) => {
-    if (place.current) { const loc = await getLocation(); return { ...CURRENT(), lat: loc.lat, lon: loc.lon }; }
+    if (place.current) {
+      const loc = await getLocation();
+      if (loc.fallback) throw new Error('Location is off for Pedl. Enter a start address, or turn on location in Settings.');
+      return { ...CURRENT(), lat: loc.lat, lon: loc.lon };
+    }
     if (place.placeId) {
       const det = await placeDetails(place.placeId);
       return { name: place.primary || det.name, address: place.secondary || det.address, lat: det.lat, lon: det.lon };

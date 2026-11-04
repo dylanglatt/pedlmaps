@@ -12,6 +12,7 @@ import Logo from './Logo';
 import { useTheme, radius, shadow } from '../lib/theme';
 import { FEEDBACK_WEBHOOK, PRIVACY_URL, DEBUG_TEST_CRASH } from '../lib/config';
 import app from '../app.json';
+import { fetchWithTimeout } from '../lib/http';
 
 const VERSION = app?.expo?.version || '?';
 // Runtime comes from the running binary (app.json may hold a policy object, not a string).
@@ -84,7 +85,7 @@ export default function Feedback({ visible, screen, onClose }) {
       footer: { text: diag },
     };
     try {
-      const res = await fetch(FEEDBACK_WEBHOOK, {
+      const res = await fetchWithTimeout(FEEDBACK_WEBHOOK, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ embeds: [embed] }),
