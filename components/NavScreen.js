@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Modal, Switch, ScrollView, Dimensions,
-  PanResponder, LayoutAnimation, UIManager, Platform,
+  PanResponder, LayoutAnimation, UIManager, Platform, Alert, Linking,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path, Circle } from 'react-native-svg';
@@ -146,7 +146,8 @@ async function rebuildFrom(here, waypoints) {
     let leg = null;
     try { leg = await directions(profile, [anchor, target]); } catch {}
     if (leg) { maneuvers.push(...leg.maneuvers); coords.push(...leg.coords); }
-    maneuvers.push({ instruction: wp.instruction, location: wp.location, distance: 0, kind: wp.kind });
+    // Keep the whole waypoint (station, seg, ...): dock monitoring needs `station`.
+    maneuvers.push({ ...wp, distance: 0 });
     anchor = target;
   }
   // Same decision-point collapse as the initial route, so a reroute down a long
@@ -189,8 +190,12 @@ export default function NavScreen({ trip, system = null, preferLyft = false, onE
   const [arrival, setArrival] = useState(arrivalRef.current);
   const [minLeft, setMinLeft] = useState(Math.max(1, Math.round(plan.totalSec / 60)));
   const tick = useRef(null);
+  // Background ("Always") location denied: guidance stops when the screen locks.
+  const [bgOff, setBgOff] = useState(false);
+  const mounted = useRef(true);
 
   useEffect(() => {
+    mounted.current = true;
     nav.start({
       maneuvers: route.maneuvers,
       routeCoords: route.coords,
@@ -242,11 +247,30 @@ export default function NavScreen({ trip, system = null, preferLyft = false, onE
         // Let the spoken "You have arrived" land, then close the route itself.
         setTimeout(() => { onEnd && onEnd(); }, 4000);
       },
+    }).then((res) => {
+      if (mounted.current && res && !res.cancelled && !res.background && Platform.OS !== 'web') setBgOff(true);
+    }).catch((e) => {
+      // Nav couldn't start (location denied, location services off, task error).
+      // nav.start already cleaned up; close this screen and say why.
+      if (!mounted.current) return;
+      stopSim();
+      onEnd && onEnd();
+      const denied = e && e.code === 'LOCATION_DENIED';
+      Alert.alert(
+        denied ? 'Location is off for Pedl' : 'Couldn\'t start navigation',
+        denied
+          ? 'Turn-by-turn directions need your location. You can turn it on in Settings.'
+          : 'Check that Location Services are on, then try again.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Open Settings', onPress: () => Linking.openSettings() },
+        ],
+      );
     });
     tick.current = setInterval(() => {
       setMinLeft(Math.max(0, Math.round((arrivalRef.current.getTime() - Date.now()) / 60000)));
     }, 15000);
-    return () => { clearInterval(tick.current); stopSim(); nav.stop(); };
+    return () => { mounted.current = false; clearInterval(tick.current); stopSim(); nav.stop(); };
   }, []);
 
   const toggle = (to) => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setExpanded(to); };
@@ -370,6 +394,11 @@ export default function NavScreen({ trip, system = null, preferLyft = false, onE
               <Stat big={`${minLeft}`} label="min" styles={styles} />
               <Stat big={fmtMiles(plan.distanceM || 0)} label="" styles={styles} />
             </View>
+            {bgOff && (
+              <TouchableOpacity onPress={() => Linking.openSettings()} activeOpacity={0.7} accessibilityRole="button" accessibilityLabel="Open Settings to allow Always location">
+                <Text style={styles.bgNote}>Directions pause when your screen locks. Tap to allow "Always" location in Settings.</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {expanded && (
@@ -481,5 +510,6 @@ function makeStyles(c) {
     simTxt: { color: c.text, fontSize: 13, fontWeight: '700' },
     end: { backgroundColor: c.danger, borderRadius: radius.md, paddingVertical: 15, alignItems: 'center', marginTop: 4 },
     endTxt: { color: '#fff', fontSize: 17, fontWeight: '800' },
+    bgNote: { fontSize: 12.5, color: c.textMute, textAlign: 'center', paddingBottom: 8, paddingHorizontal: 8 },
   });
 }

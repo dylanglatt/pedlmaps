@@ -76,7 +76,7 @@ async function buildMultiRoute(points, segments) {
     const seg = segments[i];
     const r = await buildRoute(points[i], seg.originStation, seg.destStation, points[i + 1], { finalDest: i === segments.length - 1, seg: i });
     if (i > 0) {
-      maneuvers.push({ instruction: `Stop at ${points[i].name || 'your stop'}. Tap when ready to continue.`, location: r.coords[0] || coords[coords.length - 1], distance: 0, kind: 'stop' });
+      maneuvers.push({ instruction: `Stop at ${points[i].name || 'your stop'}. Directions continue to your next stop.`, location: r.coords[0] || coords[coords.length - 1], distance: 0, kind: 'stop' });
     }
     maneuvers.push(...r.maneuvers);
     coords.push(...r.coords);
