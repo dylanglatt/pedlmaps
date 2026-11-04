@@ -112,6 +112,13 @@ export default function TripScreen({ stations, onStartNav }) {
   const planSeq = useRef(0);   // latest planning request; older responses are dropped
   const sugSeq = useRef(0);    // latest autocomplete request
   const chooseSeq = useRef(0); // latest tapped place; a slower earlier tap is dropped
+  const choosing = useRef(false); // a place is resolving (owns `busy` until handed to runPlan)
+  // Abandon any in-flight place resolution: the rider moved to another field,
+  // went back, or started saving, so a late result must not commit anywhere.
+  const cancelChoose = useCallback(() => {
+    chooseSeq.current++;
+    if (choosing.current) { choosing.current = false; setBusy(false); }
+  }, []);
   const alive = useRef(true);
 
   useEffect(() => {
@@ -190,6 +197,8 @@ export default function TripScreen({ stations, onStartNav }) {
     buzz(); Keyboard.dismiss();
     const seq = ++chooseSeq.current;
     const latest = () => alive.current && seq === chooseSeq.current;
+    let handedOff = false; // once runPlan starts, it owns `busy`
+    choosing.current = true;
     setBusy(true); setError(null);
     try {
       const resolved = await resolvePlace(place);
@@ -214,16 +223,20 @@ export default function TripScreen({ stations, onStartNav }) {
       if (newOrigin && newDest) {
         setPhase('results');
         setQuery(''); setSugs([]);
+        handedOff = true; choosing.current = false;
         await runPlan(newOrigin, newStop ? [newStop] : [], newDest, prefer);
       } else {
         setEditing(newOrigin ? 'to' : 'from');
         setQuery(''); setSugs([]);
       }
     } catch (e) { if (latest()) setError(e.message || 'Could not plan trip'); }
-    finally { if (latest()) setBusy(false); }
+    finally {
+      if (latest() && !handedOff) { choosing.current = false; setBusy(false); }
+    }
   }, [editing, origin, dest, stop, prefer, runPlan, saving, saveType]);
 
   const startSave = useCallback((type) => {
+    cancelChoose();
     setSaveType(type); setSaving(true); setShowManager(false); setQuery(''); setSugs([]);
   }, []);
   const onAddPlace = useCallback(() => startSave('custom'), [startSave]);
@@ -253,6 +266,7 @@ export default function TripScreen({ stations, onStartNav }) {
   };
 
   const editField = useCallback((field) => {
+    cancelChoose();
     setEditing(field); setQuery(''); setSugs([]); setPhase('search');
   }, []);
 
@@ -267,7 +281,7 @@ export default function TripScreen({ stations, onStartNav }) {
   }, [origin, dest, stop, prefer, runPlan]);
 
   // Single stop (cap 1): open the search to add/edit it, or remove it.
-  const openStop = useCallback(() => { setEditing('stop'); setQuery(''); setSugs([]); setPhase('search'); }, []);
+  const openStop = useCallback(() => { cancelChoose(); setEditing('stop'); setQuery(''); setSugs([]); setPhase('search'); }, []);
   const removeStop = useCallback(() => {
     setStop(null);
     if (origin && dest) runPlan(origin, [], dest, prefer);
@@ -329,7 +343,7 @@ export default function TripScreen({ stations, onStartNav }) {
     return (
       <View style={styles.flex}>
         {origin && dest && (
-          <TouchableOpacity style={styles.backRow} onPress={() => { setPhase('results'); setQuery(''); setSugs([]); }} activeOpacity={0.7}>
+          <TouchableOpacity style={styles.backRow} onPress={() => { cancelChoose(); setPhase('results'); setQuery(''); setSugs([]); }} activeOpacity={0.7}>
             <Icon name="back" size={18} color={c.primary} />
             <Text style={styles.backTxt}>Back to trip</Text>
           </TouchableOpacity>

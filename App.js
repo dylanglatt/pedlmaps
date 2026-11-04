@@ -513,7 +513,7 @@ function AppInner() {
               <Text style={styles.centerTxt}>Try again in a moment.</Text>
             </View>
           )
-        ) : !loading && outOfArea ? (
+        ) : outOfArea ? (
           <View style={styles.center}>
             <Text style={styles.emptyTitle}>You're outside the Citi Bike service area</Text>
             <Text style={styles.centerTxt}>Pedl works with the Citi Bike network in New York. You can still browse stations there.</Text>
