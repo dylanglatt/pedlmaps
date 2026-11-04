@@ -14,6 +14,7 @@ import SavedPlaceCard from './components/SavedPlaceCard';
 import TripScreen from './components/TripScreen';
 import BottomSheet from './components/BottomSheet';
 import NavScreen from './components/NavScreen';
+import { stopOrphanedNavTask } from './lib/voiceNav';
 import Feedback from './components/Feedback';
 import Icon from './components/Icon';
 import { fetchStations, nearest, countFor } from './lib/gbfs';
@@ -42,6 +43,12 @@ if (SENTRY_DSN) {
     sendDefaultPii: false,
     // No performance tracing: spans carry request URLs (coordinates, addresses).
     tracesSampleRate: 0,
+    enableAutoPerformanceTracing: false,
+    // Native (iOS) side: don't record network requests as breadcrumbs or spans.
+    // The JS hooks below never see native-only breadcrumbs, so turn them off at source.
+    enableNetworkBreadcrumbs: false,
+    enableNetworkTracking: false,
+    enableCaptureFailedRequests: false,
     // Strip query strings (lat/lng, typed addresses, API key) and the webhook URL.
     beforeBreadcrumb: (b) => scrubBreadcrumb(b),
     beforeSend: (e) => scrubEvent(e),
@@ -226,9 +233,14 @@ function AppInner() {
   }, []);
 
   useEffect(() => {
+    stopOrphanedNavTask();
     (async () => {
       const [pl, un, onboarded, fv, prefLyft] = await Promise.all([loadPlaces(), loadUnits(), loadOnboarded(), loadFavStations(), loadPreferLyft()]);
       setPlaces(pl); setUnits(un); setFavIds(fv); setPreferLyft(prefLyft);
+      // Show the last good feed immediately (labeled "Updated X ago" by its age);
+      // the live fetch below replaces it as soon as it lands.
+      const cached = await loadStationsCache();
+      if (cached && !haveData.current) { setAll(cached.stations); setUpdatedAt(cached.at); haveData.current = true; }
       // Reveal the app once data is in, but never wait longer than splashMaxWaitMs:
       // a dead connection must not leave the rider staring at the splash.
       await Promise.race([refresh(), new Promise((r) => setTimeout(r, NETWORK.splashMaxWaitMs))]);
@@ -270,6 +282,8 @@ function AppInner() {
   }, [all]);
 
   const stations = useMemo(() => nearest(all, center.lat, center.lon, 75), [all, center]);
+  // Map center is far from every station (e.g. the rider is in another city).
+  const outOfArea = !!(stations[0] && stations[0].distance > NEARBY.maxM);
   const favIdSet = useMemo(() => new Set(favIds), [favIds]);
   // Favorite stations resolved to live data, with distance from the current center.
   const favStations = useMemo(() => {
@@ -421,6 +435,7 @@ function AppInner() {
             </TouchableOpacity>
           ))}
         </View>
+        {!outOfArea && (
         <View style={styles.unlockWrap}>
           <TouchableOpacity
             style={styles.unlockBtn}
@@ -433,6 +448,7 @@ function AppInner() {
             <Text style={styles.unlockTxt}>Unlock a bike</Text>
           </TouchableOpacity>
         </View>
+        )}
       </View>
     );
 
@@ -478,6 +494,10 @@ function AppInner() {
       <BottomSheet index={sheetIndex} onIndexChange={setSheetIndex} renderHeader={Header} bottomInset={insets.bottom} topReserve={insets.top + 64}>
         {searching ? (
           <TripScreen stations={all} onStartNav={setNavTrip} />
+        ) : loading && stations.length === 0 ? (
+          <View style={styles.center}>
+            <Text style={styles.centerTxt}>Loading stations…</Text>
+          </View>
         ) : !loading && stations.length === 0 ? (
           error ? (
             <View style={styles.center}>
@@ -493,7 +513,7 @@ function AppInner() {
               <Text style={styles.centerTxt}>Try again in a moment.</Text>
             </View>
           )
-        ) : !loading && stations[0] && stations[0].distance > NEARBY.maxM ? (
+        ) : !loading && outOfArea ? (
           <View style={styles.center}>
             <Text style={styles.emptyTitle}>You're outside the Citi Bike service area</Text>
             <Text style={styles.centerTxt}>Pedl works with the Citi Bike network in New York. You can still browse stations there.</Text>

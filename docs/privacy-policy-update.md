@@ -18,9 +18,10 @@ repo, so apply them there.
 **Diagnostics** (replace the current Diagnostics bullet):
 
 > **Diagnostics.** If the app crashes or hits an error, a crash report is sent to Sentry. It
-> includes the error, the app version, and device model and OS. Web addresses in these reports
-> are stripped of their parameters before sending, so they do not include your location,
-> searched addresses, or any keys. Crash reports are not linked to your identity.
+> includes the error, the app version, and device model and OS. Network requests are not
+> recorded, and any web address that appears in a report is stripped of its parameters, so
+> reports do not include your location, searched addresses, or any keys. Crash reports are not
+> linked to your identity.
 
 **Location** (add one sentence to the existing Location bullet):
 
@@ -31,8 +32,9 @@ repo, so apply them there.
 
 - Remove "Apple TestFlight" (or keep it only as "during beta testing").
 - Add **Discord** (feedback delivery).
-- Add **Google Cloud Text-to-Speech** (spoken directions: the text of each direction is sent
-  to Google to generate audio; no location or personal data).
+- Add **Google Cloud Text-to-Speech** (spoken directions: the text of each direction, which
+  includes street names and the names of your stations and destination, is sent to Google to
+  generate audio. No coordinates or account data are sent.)
 - Keep Google Maps Platform, OpenRouteService, the GBFS feed, and Sentry.
 
 **Data retention** (add):

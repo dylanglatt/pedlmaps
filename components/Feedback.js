@@ -10,7 +10,7 @@ import * as Sentry from '@sentry/react-native';
 import Icon from './Icon';
 import Logo from './Logo';
 import { useTheme, radius, shadow } from '../lib/theme';
-import { FEEDBACK_WEBHOOK, PRIVACY_URL, DEBUG_TEST_CRASH } from '../lib/config';
+import { FEEDBACK_WEBHOOK, PRIVACY_URL, DEBUG_TEST_CRASH, IS_PROD_CHANNEL } from '../lib/config';
 import app from '../app.json';
 import { fetchWithTimeout } from '../lib/http';
 
@@ -178,8 +178,9 @@ export default function Feedback({ visible, screen, onClose }) {
                     Privacy Policy
                   </Text>
                   {'   ·   '}
-                  <Text onLongPress={buildInfo} accessibilityRole="button" accessibilityLabel="Build info">
-                    {`Pedl v${VERSION} · ${build}`}
+                  {/* Build id + long-press diagnostics only on TestFlight/dev, not the App Store build. */}
+                  <Text onLongPress={IS_PROD_CHANNEL ? undefined : buildInfo} accessibilityRole={IS_PROD_CHANNEL ? 'text' : 'button'} accessibilityLabel={IS_PROD_CHANNEL ? undefined : 'Build info'}>
+                    {IS_PROD_CHANNEL ? `Pedl v${VERSION}` : `Pedl v${VERSION} · ${build}`}
                   </Text>
                 </Text>
                 {DEBUG_TEST_CRASH && (

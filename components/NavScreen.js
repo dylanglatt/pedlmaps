@@ -193,6 +193,7 @@ export default function NavScreen({ trip, system = null, preferLyft = false, onE
   // Background ("Always") location denied: guidance stops when the screen locks.
   const [bgOff, setBgOff] = useState(false);
   const mounted = useRef(true);
+  const arriveTimer = useRef(null);
 
   useEffect(() => {
     mounted.current = true;
@@ -220,17 +221,21 @@ export default function NavScreen({ trip, system = null, preferLyft = false, onE
           const wps = nav.remainingWaypoints();
           if (!wps.length) { nav.cancelReroute(); return; }
           const r = await rebuildFrom(h, wps);
+          // This screen may have closed (and a new route started on the shared nav
+          // singleton) while we were fetching: never touch nav or state then.
+          if (!mounted.current) return;
           if (!r.maneuvers.length || !r.coords.length) { nav.cancelReroute(); return; }
           setCoords(r.coords);
           setManeuvers(r.maneuvers);
           nav.replaceRoute(r.maneuvers, r.coords); // resumes guidance on the new path
-        } catch { nav.cancelReroute(); }
+        } catch { if (mounted.current) nav.cancelReroute(); }
       },
       // Destination dock filled up mid-ride: same rebuild as onReroute, but the dock
       // waypoint now points at the new station. Announced by nav once it's in place.
       onDockSwitch: async (h, wps, sw) => {
         try {
           const r = await rebuildFrom(h, wps);
+          if (!mounted.current) return; // closed mid-fetch (see onReroute)
           if (!r.maneuvers.length || !r.coords.length) { nav.cancelReroute(); return; }
           setCoords(r.coords);
           setManeuvers(r.maneuvers);
@@ -240,12 +245,12 @@ export default function NavScreen({ trip, system = null, preferLyft = false, onE
           setArrival(arrivalRef.current);
           setMinLeft(Math.max(0, Math.round((arrivalRef.current.getTime() - Date.now()) / 60000)));
           nav.applyDockSwitch(r.maneuvers, r.coords, sw);
-        } catch { nav.cancelReroute(); }
+        } catch { if (mounted.current) nav.cancelReroute(); }
       },
       onArrive: () => {
         setCur({ instruction: arrivalLine(dest && !dest.current ? (dest.name || dest.label) : null) }); setNext(null); setDist(null);
         // Let the spoken "You have arrived" land, then close the route itself.
-        setTimeout(() => { onEnd && onEnd(); }, 4000);
+        arriveTimer.current = setTimeout(() => { if (mounted.current) onEnd && onEnd(); }, 4000);
       },
     }).then((res) => {
       if (mounted.current && res && !res.cancelled && !res.background && Platform.OS !== 'web') setBgOff(true);
@@ -270,7 +275,7 @@ export default function NavScreen({ trip, system = null, preferLyft = false, onE
     tick.current = setInterval(() => {
       setMinLeft(Math.max(0, Math.round((arrivalRef.current.getTime() - Date.now()) / 60000)));
     }, 15000);
-    return () => { mounted.current = false; clearInterval(tick.current); stopSim(); nav.stop(); };
+    return () => { mounted.current = false; clearInterval(tick.current); clearTimeout(arriveTimer.current); stopSim(); nav.stop(); };
   }, []);
 
   const toggle = (to) => { LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut); setExpanded(to); };

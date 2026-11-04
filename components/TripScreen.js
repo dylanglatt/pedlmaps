@@ -111,6 +111,7 @@ export default function TripScreen({ stations, onStartNav }) {
   const timer = useRef(null);
   const planSeq = useRef(0);   // latest planning request; older responses are dropped
   const sugSeq = useRef(0);    // latest autocomplete request
+  const chooseSeq = useRef(0); // latest tapped place; a slower earlier tap is dropped
   const alive = useRef(true);
 
   useEffect(() => {
@@ -187,9 +188,12 @@ export default function TripScreen({ stations, onStartNav }) {
 
   const choose = useCallback(async (place) => {
     buzz(); Keyboard.dismiss();
+    const seq = ++chooseSeq.current;
+    const latest = () => alive.current && seq === chooseSeq.current;
     setBusy(true); setError(null);
     try {
       const resolved = await resolvePlace(place);
+      if (!latest()) return; // the rider tapped something else while this resolved
       if (saving) {
         const finish = async (nickname, type) => {
           await addPlace(makePlace({ nickname, type, lat: resolved.lat, lon: resolved.lon, address: resolved.address, name: resolved.name }));
@@ -215,8 +219,8 @@ export default function TripScreen({ stations, onStartNav }) {
         setEditing(newOrigin ? 'to' : 'from');
         setQuery(''); setSugs([]);
       }
-    } catch (e) { setError(e.message || 'Could not plan trip'); }
-    finally { setBusy(false); }
+    } catch (e) { if (latest()) setError(e.message || 'Could not plan trip'); }
+    finally { if (latest()) setBusy(false); }
   }, [editing, origin, dest, stop, prefer, runPlan, saving, saveType]);
 
   const startSave = useCallback((type) => {
