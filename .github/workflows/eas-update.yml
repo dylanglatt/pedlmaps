@@ -2,9 +2,17 @@ name: EAS Update
 
 # Publishes an over-the-air JS update to the "preview" channel on every push to main.
 # (Native changes — new modules, icon/name, permissions — still need a real `eas build`.)
+# Production store builds listen on the "production" channel and only get updates via the
+# manual "EAS Promote" workflow (eas-promote.yml).
 on:
   push:
     branches: [main]
+
+# One publish at a time per branch; a newer push cancels an older in-flight run so an
+# older commit can never be published last.
+concurrency:
+  group: eas-update-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   update:
@@ -28,5 +36,14 @@ jobs:
       - name: Install dependencies
         run: npm ci --legacy-peer-deps
 
+      # Real gate: bundle the app the same way EAS Update will. Catches bad imports and JSX errors.
+      - name: Bundle check
+        run: npx expo export --platform ios --output-dir /tmp/bundle-check
+
       - name: Publish update
-        run: eas update --branch preview --environment preview --message "${{ github.event.head_commit.message }}" --non-interactive
+        env:
+          # Passed via env, never interpolated into the shell, so a commit message can't inject commands.
+          UPDATE_MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          MSG="$(printf '%s' "$UPDATE_MESSAGE" | head -n 1 | cut -c1-200)"
+          eas update --branch preview --environment preview --message "$MSG" --non-interactive
