@@ -10,6 +10,10 @@ Code fixes are on branch `launch-fixes`. Remaining, in order:
 - [ ] Google Cloud: create a TTS-only key (EXPO_PUBLIC_GOOGLE_TTS_KEY), ship, device-verify, THEN
       restrict the Maps key to iOS app `com.dylanglatt.citibike` + the 4 Maps APIs, set quotas
       and a billing alert (docs/claude-code-launch-prompts.md Phase 0.3 to 0.6).
+- [x] TTS-only key `pedl-tts` created (Text-to-Speech API only), in `.env`, verified 2026-11-05.
+- [ ] AFTER the new build works on device: on "Maps Platform API Key" untick Cloud Text-to-Speech
+      (leave Directions, Distance Matrix, Geocoding, Places New) and set Application
+      restrictions -> iOS apps -> com.dylanglatt.citibike. Not before: old builds use it for voice.
 - [ ] Rotate the Discord webhook and ORS key; update `.env` and both EAS environments.
 - [ ] Copy all EXPO_PUBLIC_* vars + SENTRY_AUTH_TOKEN into the EAS `production` environment.
 - [ ] Update pedlmaps.com/privacy.html from docs/privacy-policy-update.md.
